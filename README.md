@@ -1,5 +1,9 @@
 # NOCAP
 
+<p align="center">
+  <img src="assets/nocap.jpg" alt="nocap" width="600">
+</p>
+
 > **N**o-overhead **C**apture. **A**utomatic **P**ath routing.
 > *Capture tool output. No cap.*
 
