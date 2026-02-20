@@ -21,13 +21,7 @@ cap nmap -sCV 10.10.10.5
 ## Install
 
 ```bash
-pipx install nocap
-```
-
-Or with pip:
-
-```bash
-pip install nocap
+pipx install git+https://github.com/BLTSEC/NOCAP.git
 ```
 
 Or directly from source:
