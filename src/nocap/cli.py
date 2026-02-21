@@ -11,6 +11,7 @@ import fcntl
 import os
 import re
 import select
+import shutil
 import signal
 import struct
 import subprocess
@@ -26,7 +27,48 @@ __all__ = ["main"]
 # Constants
 # ---------------------------------------------------------------------------
 
-SUBDIRS = frozenset({"recon", "loot", "exploitation", "screenshots"})
+SUBDIRS = frozenset({"recon", "loot", "exploitation", "screenshots", "notes"})
+
+# Auto tool→subdir routing (opt-in via --auto / -a)
+TOOL_SUBDIRS: dict[str, str] = {
+    # recon
+    "nmap": "recon",
+    "rustscan": "recon",
+    "masscan": "recon",
+    "gobuster": "recon",
+    "feroxbuster": "recon",
+    "ffuf": "recon",
+    "wfuzz": "recon",
+    "whatweb": "recon",
+    "nikto": "recon",
+    "enum4linux": "recon",
+    "enum4linux-ng": "recon",
+    "ldapsearch": "recon",
+    "dnsx": "recon",
+    "subfinder": "recon",
+    "amass": "recon",
+    "kerbrute": "recon",
+    "netexec": "recon",
+    "crackmapexec": "recon",
+    "smbclient": "recon",
+    "rpcclient": "recon",
+    "snmpwalk": "recon",
+    "snmpenum": "recon",
+    "showmount": "recon",
+    "wpscan": "recon",
+    "sqlmap": "recon",
+    "dirsearch": "recon",
+    "onesixtyone": "recon",
+    "dnsrecon": "recon",
+    # loot
+    "hashcat": "loot",
+    "john": "loot",
+    "hydra": "loot",
+    "medusa": "loot",
+    # exploitation
+    "msfconsole": "exploitation",
+    "msfvenom": "exploitation",
+}
 
 # Flags whose *next* token is a value to be consumed (not added to filename)
 SKIP_FLAGS = frozenset({
@@ -45,8 +87,11 @@ SKIP_FLAGS = frozenset({
 })
 
 _IP_RE  = re.compile(r"^\d{1,3}(\.\d{1,3}){3}(/\d+)?$")
+_IP6_RE = re.compile(r"^([0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}(/\d+)?$")
 _URL_RE = re.compile(r"^https?://")
 _NUM_RE = re.compile(r"^\d+(,\d+)*$")
+
+_LAST_FILE = Path("/tmp/.nocap_last")
 
 # ---------------------------------------------------------------------------
 # Engagement directory resolution
@@ -76,7 +121,7 @@ def _get_base_dir() -> Path | None:
 # Filename generation
 # ---------------------------------------------------------------------------
 
-def _build_filename(cmd: list[str]) -> str:
+def _build_filename(cmd: list[str], note: str = "") -> str:
     """Derive a descriptive filename stem from a command + args list."""
     tool = Path(cmd[0]).name
     parts: list[str] = [tool]
@@ -89,6 +134,9 @@ def _build_filename(cmd: list[str]) -> str:
 
         # IPv4 addresses (with optional CIDR)
         if _IP_RE.match(arg):
+            continue
+        # IPv6 addresses
+        if _IP6_RE.match(arg):
             continue
         # HTTP/S URLs
         if _URL_RE.match(arg):
@@ -117,6 +165,11 @@ def _build_filename(cmd: list[str]) -> str:
         clean = clean[:15]
         if clean:
             parts.append(clean)
+
+    if note:
+        note_clean = re.sub(r"[^a-zA-Z0-9_-]", "", note)[:20]
+        if note_clean:
+            parts.append(note_clean)
 
     name = "_".join(parts)
     name = re.sub(r"_+", "_", name).rstrip("_")[:60]
@@ -264,6 +317,52 @@ def _run_pty(cmd: list[str], outfile: Path) -> int:
     return exit_code
 
 # ---------------------------------------------------------------------------
+# Subcommands
+# ---------------------------------------------------------------------------
+
+def _cmd_last() -> None:
+    """Print the path of the last captured file."""
+    if _LAST_FILE.exists():
+        print(_LAST_FILE.read_text().strip())
+    else:
+        print("nocap: no captures yet", file=sys.stderr)
+        sys.exit(1)
+
+
+def _cmd_ls(subdir: str = "") -> None:
+    """List captures for the current engagement, optionally scoped to a subdir."""
+    base = _get_base_dir() or Path.cwd()
+    search_dir = base / subdir if subdir else base
+
+    if not search_dir.exists():
+        print(f"nocap: directory not found: {search_dir}", file=sys.stderr)
+        sys.exit(1)
+
+    files = sorted(
+        search_dir.rglob("*.txt"),
+        key=lambda f: f.stat().st_mtime,
+        reverse=True,
+    )
+    if not files:
+        print(f"nocap: no captures in {search_dir}", file=sys.stderr)
+        sys.exit(1)
+
+    file_list = "\n".join(str(f) for f in files)
+
+    if shutil.which("fzf"):
+        preview_cmd = "bat --color=always {} 2>/dev/null || cat {}"
+        subprocess.run(
+            ["fzf", "--preview", preview_cmd, "--preview-window=right:70%:wrap", "--ansi"],
+            input=file_list,
+            text=True,
+        )
+    else:
+        for f in files:
+            size = f.stat().st_size
+            mtime = datetime.fromtimestamp(f.stat().st_mtime).strftime("%Y-%m-%d %H:%M")
+            print(f"{mtime}  {size:>8}  {f}")
+
+# ---------------------------------------------------------------------------
 # CLI entry point
 # ---------------------------------------------------------------------------
 
@@ -271,30 +370,44 @@ USAGE = """\
 NOCAP — Capture tool output. No cap.
 
 Usage:
-  cap [recon|loot|exploitation|screenshots] <command> [args...]
+  cap [options] [subdir] <command> [args...]
+  cap last
+  cap ls [subdir]
   cap --help | --version
+
+Options:
+  -n, --note <label>    Append a custom label to the output filename
+  -s, --subdir <name>   Write to a custom subdir (created if needed)
+  -a, --auto            Auto-route to subdir based on tool name (opt-in)
+  -D, --dry-run         Show where output would go without running
+
+Subcommands:
+  last                  Print path of the last captured file
+  ls [subdir]           Browse captures interactively (fzf) or list them
+
+Subdirs:
+  recon, loot, exploitation, screenshots, notes
 
 Examples:
   cap nmap -sCV 10.10.10.5
   cap recon gobuster dir -u http://10.10.10.5 -w /wordlist.txt
-  cap loot hashcat -m 1000 hashes.txt /wordlist.txt
-  cap netexec smb 10.10.10.5 -u admin -p password
-  cap feroxbuster -u http://10.10.10.5 -x php,html
+  cap -n after-creds nmap -sCV 10.10.10.5
+  cap --auto nmap -sCV 10.10.10.5
+  cap -D feroxbuster -u http://10.10.10.5
+  cap last
+  cap ls
+  cap ls recon
+  cat $(cap last)
 
 Routing (priority order):
   1. $TARGET env var   → /workspace/$TARGET/<subdir>/
   2. tmux pentest_*    → /workspace/<target>/<subdir>/
   3. Fallback          → ./<subdir>/  (current working directory)
 
-Output filename is derived from the command and meaningful flags.
-IPs, URLs, paths, wordlists, and numeric values are stripped automatically.
-Collisions auto-increment: nmap_sCV.txt → nmap_sCV_2.txt → nmap_sCV_3.txt
-
-Every output file starts with a header:
-  Command: nmap -sCV 10.10.10.5
-  Date:    Fri Feb 20 14:30:52 EST 2026
-  ---
-  <output follows>
+Auto-routing (--auto / -a):
+  Infers subdir from tool name — nmap/gobuster/ffuf → recon/,
+  hashcat/john → loot/, msfvenom → exploitation/. Explicit subdir
+  always takes precedence over --auto.
 """
 
 
@@ -310,9 +423,40 @@ def main(argv: list[str] | None = None) -> None:
         print(f"nocap {__version__}")
         sys.exit(0)
 
-    # Optional engagement subdir as first positional arg
+    # Subcommands
+    if args[0] == "last":
+        _cmd_last()
+        return
+
+    if args[0] == "ls":
+        subdir_arg = args[1] if len(args) > 1 and args[1] in SUBDIRS else ""
+        _cmd_ls(subdir_arg)
+        return
+
+    # Parse nocap-specific flags (must come before subdir / command)
+    note = ""
+    auto_route = False
+    dry_run = False
     subdir = ""
-    if args[0] in SUBDIRS:
+
+    while args:
+        if args[0] in ("-n", "--note") and len(args) > 1:
+            note = args[1]
+            args = args[2:]
+        elif args[0] in ("-a", "--auto"):
+            auto_route = True
+            args = args[1:]
+        elif args[0] in ("-D", "--dry-run"):
+            dry_run = True
+            args = args[1:]
+        elif args[0] in ("-s", "--subdir") and len(args) > 1:
+            subdir = args[1]
+            args = args[2:]
+        else:
+            break
+
+    # Optional predefined engagement subdir as first positional arg
+    if not subdir and args and args[0] in SUBDIRS:
         subdir = args[0]
         args = args[1:]
 
@@ -322,6 +466,11 @@ def main(argv: list[str] | None = None) -> None:
         sys.exit(1)
 
     cmd = args
+
+    # Auto tool→subdir routing (only when --auto is set and no explicit subdir)
+    if auto_route and not subdir:
+        tool = Path(cmd[0]).name
+        subdir = TOOL_SUBDIRS.get(tool, "")
 
     # Resolve output directory
     base_dir = _get_base_dir()
@@ -337,8 +486,12 @@ def main(argv: list[str] | None = None) -> None:
     outdir.mkdir(parents=True, exist_ok=True)
 
     # Build filename and resolve collisions
-    stem = _build_filename(cmd)
+    stem = _build_filename(cmd, note=note)
     outfile = _resolve_outfile(outdir, stem)
+
+    if dry_run:
+        print(f"\033[90m[dry] → {outfile}\033[0m")
+        sys.exit(0)
 
     # Write file header
     with outfile.open("w") as f:
@@ -349,6 +502,14 @@ def main(argv: list[str] | None = None) -> None:
     print(f"\033[90m[cap] → {outfile}\033[0m", file=sys.stderr)
 
     exit_code = _run_pty(cmd, outfile)
+
+    # Track last captured file for `cap last`
+    _LAST_FILE.write_text(str(outfile))
+
+    # Bell — audible/visual alert that the command has finished
+    sys.stderr.write("\a")
+    sys.stderr.flush()
+
     sys.exit(exit_code)
 
 
