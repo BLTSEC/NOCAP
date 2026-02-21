@@ -8,12 +8,18 @@
 > *Capture tool output. No cap.*
 
 NOCAP is a zero-dependency command capture wrapper built for security operators.
-Drop it in front of any tool — NOCAP handles smart file naming, engagement directory
-routing, collision avoidance, and live output. You stay focused on the objective.
+Drop it in front of any tool and it handles the rest: smart file naming, engagement
+directory routing, collision avoidance, live TTY output, bell notifications, and
+interactive capture browsing. No more `| tee recon/nmap-sCV.txt` one-liners.
 
-```
+```bash
+# $TARGET set or pentest_* tmux session active → routes to /workspace/<target>/
 cap nmap -sCV 10.10.10.5
 # → /workspace/10.10.10.5/nmap_sCV.txt
+
+# No engagement context → writes to current directory
+cap nmap -sCV 10.10.10.5
+# → ./nmap_sCV.txt
 ```
 
 ---
