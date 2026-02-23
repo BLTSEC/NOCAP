@@ -67,7 +67,7 @@ cap update
 | `cap tail` | Follow last capture from the start — useful while a scan runs in another pane |
 | `cap open` | Open last capture in `$EDITOR`, then `bat`, `less -R`, or `cat` |
 | `cap rm` | Delete the last captured file |
-| `cap summary` | Compact table of all captures: timestamp, line count, size, path |
+| `cap summary [keyword]` | Compact table of all captures, or search across them by keyword |
 | `cap ls [subdir]` | Browse captures interactively (fzf) or list them |
 | `cap update` | Update nocap to the latest version via pipx |
 
@@ -120,6 +120,10 @@ cp $(cap last) ~/report/evidence.txt
 
 # Engagement overview
 cap summary                          # timestamp, lines, size, path for all captures
+cap summary passwords                # find credentials across all captures
+cap summary hashes                   # find crackable hashes
+cap summary ports                    # open ports from all nmap/scan output
+cap summary admin                    # literal keyword search
 cap ls                               # interactive fzf browser
 cap ls recon                         # scoped to recon/
 
@@ -228,12 +232,35 @@ cp $(cap last) ~/report/evidence.txt
 
 ## `cap summary`
 
-Prints a compact table of all captures for the current engagement — timestamp, line count, size, and relative path:
+Without a keyword, prints a compact table of all captures — timestamp, line count, size, and relative path:
 
 ```
 2026-02-23 14:32  1234 lines   45.2K  recon/nmap_sCV.txt
 2026-02-23 14:28   892 lines   28.1K  recon/gobuster_dir.txt
 2026-02-23 13:55   310 lines    9.8K  loot/hashcat_m_1000.txt
+```
+
+With a keyword, searches across all captures and prints matching lines grouped by file:
+
+```bash
+cap summary passwords   # credential patterns (netexec, hydra, config files)
+cap summary hashes      # NTLM, MD5, SHA1, SHA256 patterns
+cap summary users       # username/login/account patterns
+cap summary emails      # email addresses
+cap summary ports       # open port lines (nmap: 80/tcp open)
+cap summary vulns       # CVEs, vulnerable, exploitable, severity: critical/high
+cap summary urls        # HTTP/HTTPS URLs
+cap summary admin       # literal keyword search (any term)
+```
+
+Output groups matches by file with the filename highlighted:
+
+```
+recon/netexec_smb.txt
+  [+] CORP\administrator:Password123! (Pwn3d!)
+
+loot/hashcat_m_1000.txt
+  admin:aad3b435b51404eeaad3b435b51404ee:32ed87bdb5fdc5e9cba88547376818d4
 ```
 
 ---

@@ -268,6 +268,39 @@ _IP6_RE = re.compile(r"^([0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}(/\d+)?$")
 _URL_RE = re.compile(r"^https?://")
 _NUM_RE = re.compile(r"^\d+(,\d+)*$")
 
+# Strip ANSI escape codes for clean text matching in summary search
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
+
+# Named smart patterns for `cap summary <keyword>`
+_SUMMARY_PATTERNS: dict[str, re.Pattern[str]] = {
+    "passwords": re.compile(
+        r"(?i)(?:password|passwd|pass(?:word)?|pwd|secret|credential)\s*[:=]\s*\S+"
+        r"|(?i)\[\+\]\s+\S+\\\S+:\S+"          # netexec/CME:  [+] CORP\user:pass
+        r"|(?i)login:\s*\S+.*password:\s*\S+",  # hydra output
+    ),
+    "hashes": re.compile(
+        r"[a-fA-F0-9]{32}:[a-fA-F0-9]{32}"                      # NTLM  LM:NT
+        r"|(?<![a-fA-F0-9])[a-fA-F0-9]{32}(?![a-fA-F0-9])"     # MD5
+        r"|(?<![a-fA-F0-9])[a-fA-F0-9]{40}(?![a-fA-F0-9])"     # SHA1
+        r"|(?<![a-fA-F0-9])[a-fA-F0-9]{64}(?![a-fA-F0-9])",    # SHA256
+    ),
+    "users": re.compile(
+        r"(?i)(?:username|user|login|account|uid)\s*[:=]\s*\S+"
+    ),
+    "emails": re.compile(
+        r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}"
+    ),
+    "ports": re.compile(
+        r"\d+/(?:tcp|udp)\s+open"
+    ),
+    "vulns": re.compile(
+        r"(?i)CVE-\d{4}-\d+|vulnerable|exploitable|(?:severity|risk):\s*(?:critical|high)"
+    ),
+    "urls": re.compile(
+        r"https?://[^\s'\"<>]+"
+    ),
+}
+
 _LAST_FILE = Path("/tmp/.nocap_last")
 
 # ---------------------------------------------------------------------------
@@ -547,35 +580,71 @@ def _cmd_rm() -> None:
     print(f"\033[90m[rm] {path}\033[0m", file=sys.stderr)
 
 
-def _cmd_summary() -> None:
-    """Print a compact summary table of all captures for the current engagement."""
+def _cmd_summary(keyword: str = "") -> None:
+    """Print a compact summary table, or search captures for a keyword/pattern."""
     base = _get_base_dir() or Path.cwd()
     files = sorted(base.rglob("*.txt"), key=lambda f: f.stat().st_mtime, reverse=True)
     if not files:
         print(f"nocap: no captures in {base}", file=sys.stderr)
         sys.exit(1)
 
-    rows = []
+    # ── table mode (no keyword) ───────────────────────────────────────────────
+    if not keyword:
+        rows = []
+        for f in files:
+            stat = f.stat()
+            mtime = datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M")
+            size = stat.st_size
+            size_str = f"{size / 1024:.1f}K" if size >= 1024 else f"{size}B"
+            try:
+                with f.open("rb") as fh:
+                    lines = fh.read().count(b"\n")
+            except Exception:
+                lines = 0
+            try:
+                rel = str(f.relative_to(base))
+            except ValueError:
+                rel = str(f)
+            rows.append((mtime, lines, size_str, rel))
+
+        line_w = max(len(str(r[1])) for r in rows)
+        size_w = max(len(r[2]) for r in rows)
+        for mtime, lines, size_str, rel in rows:
+            print(f"\033[90m{mtime}\033[0m  {lines:{line_w}} lines  {size_str:{size_w}}  {rel}")
+        return
+
+    # ── search mode ───────────────────────────────────────────────────────────
+    pattern = _SUMMARY_PATTERNS.get(keyword.lower())
+    if pattern is None:
+        pattern = re.compile(re.escape(keyword), re.IGNORECASE)
+
+    found_any = False
     for f in files:
-        stat = f.stat()
-        mtime = datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M")
-        size = stat.st_size
-        size_str = f"{size / 1024:.1f}K" if size >= 1024 else f"{size}B"
-        try:
-            with f.open("rb") as fh:
-                lines = fh.read().count(b"\n")
-        except Exception:
-            lines = 0
         try:
             rel = str(f.relative_to(base))
         except ValueError:
             rel = str(f)
-        rows.append((mtime, lines, size_str, rel))
 
-    line_w = max(len(str(r[1])) for r in rows)
-    size_w = max(len(r[2]) for r in rows)
-    for mtime, lines, size_str, rel in rows:
-        print(f"\033[90m{mtime}\033[0m  {lines:{line_w}} lines  {size_str:{size_w}}  {rel}")
+        matches: list[str] = []
+        try:
+            with f.open("r", encoding="utf-8", errors="replace") as fh:
+                for line in fh:
+                    clean = _ANSI_RE.sub("", line.rstrip("\r\n"))
+                    if pattern.search(clean):
+                        matches.append(clean)
+        except Exception:
+            continue
+
+        if matches:
+            found_any = True
+            print(f"\033[33m{rel}\033[0m")
+            for m in matches:
+                print(f"  {m}")
+            print()
+
+    if not found_any:
+        print(f"nocap: no matches for '{keyword}'", file=sys.stderr)
+        sys.exit(1)
 
 
 def _cmd_update() -> None:
@@ -648,7 +717,9 @@ Subcommands:
   tail                  Follow last capture from the start (tail -f)
   open                  Open last capture in $EDITOR / bat / less / cat
   rm                    Delete the last captured file
-  summary               Table of all captures: timestamp, lines, size, path
+  summary [keyword]     Table of all captures, or search across them.
+                        Named patterns: passwords, hashes, users, emails,
+                        ports, vulns, urls  — or any literal keyword.
   ls [subdir]           Browse captures interactively (fzf) or list them
   update                Update nocap to the latest version via pipx
 
@@ -731,7 +802,7 @@ def _main(argv: list[str] | None = None) -> None:
         return
 
     if args[0] == "summary":
-        _cmd_summary()
+        _cmd_summary(args[1] if len(args) > 1 else "")
         return
 
     if args[0] == "update":
