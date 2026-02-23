@@ -616,7 +616,10 @@ def _cmd_summary(keyword: str = "") -> None:
     # ── search mode ───────────────────────────────────────────────────────────
     pattern = _SUMMARY_PATTERNS.get(keyword.lower())
     if pattern is None:
-        pattern = re.compile(re.escape(keyword), re.IGNORECASE)
+        try:
+            pattern = re.compile(keyword, re.IGNORECASE)
+        except re.error:
+            pattern = re.compile(re.escape(keyword), re.IGNORECASE)
 
     found_any = False
     for f in files:
