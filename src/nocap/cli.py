@@ -274,9 +274,10 @@ _ANSI_RE = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
 # Named smart patterns for `cap summary <keyword>`
 _SUMMARY_PATTERNS: dict[str, re.Pattern[str]] = {
     "passwords": re.compile(
-        r"(?i)(?:password|passwd|pass(?:word)?|pwd|secret|credential)\s*[:=]\s*\S+"
-        r"|(?i)\[\+\]\s+\S+\\\S+:\S+"          # netexec/CME:  [+] CORP\user:pass
-        r"|(?i)login:\s*\S+.*password:\s*\S+",  # hydra output
+        r"(?:password|passwd|pass(?:word)?|pwd|secret|credential)\s*[:=]\s*\S+"
+        r"|\[\+\]\s+\S+\\\S+:\S+"          # netexec/CME:  [+] CORP\user:pass
+        r"|login:\s*\S+.*password:\s*\S+",  # hydra output
+        re.IGNORECASE,
     ),
     "hashes": re.compile(
         r"[a-fA-F0-9]{32}:[a-fA-F0-9]{32}"                      # NTLM  LM:NT
@@ -285,7 +286,8 @@ _SUMMARY_PATTERNS: dict[str, re.Pattern[str]] = {
         r"|(?<![a-fA-F0-9])[a-fA-F0-9]{64}(?![a-fA-F0-9])",    # SHA256
     ),
     "users": re.compile(
-        r"(?i)(?:username|user|login|account|uid)\s*[:=]\s*\S+"
+        r"(?:username|user|login|account|uid)\s*[:=]\s*\S+",
+        re.IGNORECASE,
     ),
     "emails": re.compile(
         r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}"
@@ -294,7 +296,8 @@ _SUMMARY_PATTERNS: dict[str, re.Pattern[str]] = {
         r"\d+/(?:tcp|udp)\s+open"
     ),
     "vulns": re.compile(
-        r"(?i)CVE-\d{4}-\d+|vulnerable|exploitable|(?:severity|risk):\s*(?:critical|high)"
+        r"CVE-\d{4}-\d+|vulnerable|exploitable|(?:severity|risk):\s*(?:critical|high)",
+        re.IGNORECASE,
     ),
     "urls": re.compile(
         r"https?://[^\s'\"<>]+"
