@@ -243,15 +243,21 @@ Without a keyword, prints a compact table of all captures — timestamp, line co
 With a keyword, searches across all captures and prints matching lines grouped by file:
 
 ```bash
-cap summary passwords   # credential patterns (netexec, hydra, config files)
-cap summary hashes      # NTLM, MD5, SHA1, SHA256 patterns
-cap summary users       # username/login/account patterns
-cap summary emails      # email addresses
-cap summary ports       # open port lines (nmap: 80/tcp open)
-cap summary vulns       # CVEs, vulnerable, exploitable, severity: critical/high
-cap summary urls        # HTTP/HTTPS URLs
-cap summary admin       # literal keyword search (any term)
+cap summary passwords            # credential patterns (netexec, hydra, config files)
+cap summary hashes               # NTLM, MD5, SHA1, SHA256 patterns
+cap summary users                # username/login/account patterns
+cap summary emails               # email addresses
+cap summary ports                # open port lines (nmap: 80/tcp open)
+cap summary vulns                # CVEs, vulnerable, exploitable, severity: critical/high
+cap summary urls                 # HTTP/HTTPS URLs
+cap summary admin                # literal keyword — any term
+cap summary "HTB{.*}"            # regex — match HTB flags
+cap summary "FLAG{[^}]+}"        # regex — generic CTF flag format
+cap summary "\d+\.\d+\.\d+\.\d+" # regex — all IPs across every capture
 ```
+
+The keyword is first matched against named patterns, then tried as a regex, then
+falls back to a literal case-insensitive search if the regex is invalid.
 
 Output groups matches by file with the filename highlighted:
 
@@ -261,6 +267,10 @@ recon/netexec_smb.txt
 
 loot/hashcat_m_1000.txt
   admin:aad3b435b51404eeaad3b435b51404ee:32ed87bdb5fdc5e9cba88547376818d4
+
+recon/nmap_sCV.txt
+  80/tcp   open  http    Apache httpd 2.4.38
+  443/tcp  open  https   Apache httpd 2.4.38
 ```
 
 ---
