@@ -189,24 +189,28 @@ cap -s notes nmap -sCV 10.10.10.5
 
 | Subdir | Tools |
 |---|---|
-| `recon` | **Network:** nmap, rustscan, masscan, autorecon, naabu, udpx, netdiscover, fping |
+| `recon` | **Network:** nmap, rustscan, masscan, autorecon, naabu, udpx, netdiscover, fping, arp-scan, zmap, unicornscan |
 | | **Web fuzzing:** gobuster, feroxbuster, ffuf, wfuzz, dirsearch, dirb, arjun, kr |
-| | **Web scanning:** whatweb, nikto, nuclei, httpx, httprobe, hakrawler, katana, gau, bbot, uncover, patator, ssh-audit |
+| | **Web scanning:** whatweb, nikto, nuclei, httpx, httprobe, http, curl, wget, hakrawler, katana, gospider, cariddi, gau, bbot, uncover, patator, ssh-audit, searchsploit |
+| | **Secrets/git:** trufflehog, gitleaks, git-dumper |
 | | **CMS:** wpscan, wpprobe, joomscan, droopescan, drupwn, cmsmap, moodlescan |
 | | **SSL/TLS:** testssl, sslscan, wafw00f, cors_scan |
-| | **DNS/Subdomain:** dnsx, amass, subfinder, sublist3r, findomain, assetfinder, massdns, shuffledns, fierce, dnsenum, dnsrecon, dnschef, waybackurls |
+| | **DNS/Subdomain:** dnsx, amass, subfinder, sublist3r, findomain, assetfinder, massdns, shuffledns, fierce, dnsenum, dnsrecon, dnschef, waybackurls, dig, whois |
 | | **SMB/LDAP/AD:** enum4linux, enum4linux-ng, ldapsearch, smbclient, smbmap, smbclientng, rpcclient, windapsearch, ldeep, pywerview, godap, manspider, msprobe, adidnsdump, daclsearch, nbtscan, smtp-user-enum, pysnaffler |
 | | **SNMP/NFS:** snmpwalk, onesixtyone, showmount |
 | | **Kerberos/AD collection:** kerbrute, netexec, crackmapexec, sprayhound, smartbrute, ldapdomaindump, bloodhound-python, rusthound, rusthound-ce |
 | | **OSINT:** theHarvester, recon-ng, spiderfoot, sherlock, maigret, holehe, ghunt, phoneinfoga, censys, GitFive, photon, finalrecon, maltego |
 | | **Cloud:** scout, cloudsplaining, prowler, cloudmapper.py |
-| | **WiFi:** bettercap, hcxdumptool |
-| `screenshots` | eyewitness, EyeWitness, gowitness |
-| `loot` | **Cracking:** hashcat, john, hydra, medusa, legba, fcrackzip, pdfcrack, nth, haiti, pkcrack |
+| | **WiFi:** bettercap, hcxdumptool, airodump-ng, kismet |
+| `screenshots` | eyewitness, EyeWitness, gowitness, aquatone, webscreenshot |
+| `loot` | **Cracking:** hashcat, john, hydra, medusa, legba, fcrackzip, pdfcrack, nth, haiti, pkcrack, ncrack, aircrack-ng, hcxpcapngtool |
+| | **Forensics/stego:** volatility, volatility3, binwalk, foremost, steghide, stegseek, exiftool, zsteg |
 | | **Dumping:** pypykatz, lsassy, donpapi, gosecretsdump, dploot, masky, crackhound, keytabextract, PCredz, firefox_decrypt |
-| `exploitation` | **C2/Frameworks:** msfconsole, msfvenom, msfdb, sliver-server, sliver-client, ps-empire, havoc, Villain.py, pwncat-vl, routersploit |
-| | **Web:** sqlmap, weevely, xsstrike, nosqlmap, gopherus, ssrfmap, ysoserial, phpggc, XXEinjector, php_filter_chain_generator, jdwp-shellifier, byp4xx, h2csmuggler, smuggler, tomcatWarDeployer, clusterd, token-exploiter |
+| `exploitation` | **C2/Frameworks:** msfconsole, msfvenom, msfdb, sliver-server, sliver-client, ps-empire, havoc, Villain.py, pwncat-vl, pwncat-cs, routersploit |
+| | **Tunneling:** ligolo-ng, chisel, socat |
+| | **Web:** sqlmap, weevely, xsstrike, nosqlmap, gopherus, ssrfmap, ysoserial, phpggc, XXEinjector, php_filter_chain_generator, jdwp-shellifier, byp4xx, h2csmuggler, smuggler, tomcatWarDeployer, clusterd, token-exploiter, dalfox, commix, tplmap, ghauri, jwt_tool, swaks |
 | | **AD/Windows:** evil-winrm, evil-winrm-py, mitm6, ntlmrelayx.py, krbrelayx.py, aclpwn, coercer, petitpotam.py, dfscoerce.py, shadowcoerce.py, pywhisker, targetedKerberoast.py, bloodyAD, autobloody, gpoddity, goexec, certipy, noPac.py, pre2k, passthecert.py, sccmhunter.py, pxethief, remotemonologue.py |
+| | **Impacket:** psexec.py, wmiexec.py, smbexec.py, atexec.py, dcomexec.py, secretsdump.py, GetNPUsers.py, GetUserSPNs.py |
 
 ---
 

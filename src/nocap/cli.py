@@ -805,16 +805,23 @@ Routing (priority order):
 Auto-routing (--auto / -a):
   Infers subdir from tool name. Explicit subdir always takes precedence.
   recon/      nmap, rustscan, masscan, autorecon, gobuster, feroxbuster,
-              ffuf, wfuzz, dirsearch, nuclei, httpx, whatweb, nikto,
-              wpscan, amass, subfinder, dnsx, kerbrute, netexec, smbmap,
-              enum4linux-ng, ldapsearch, bloodhound-python, theHarvester,
-              spiderfoot, recon-ng, bbot, katana, …
-  screenshots/ eyewitness, gowitness
-  loot/       hashcat, john, hydra, medusa, legba, pypykatz, lsassy,
+              ffuf, wfuzz, dirsearch, nuclei, httpx, http, curl, wget,
+              whatweb, nikto, gospider, cariddi, searchsploit, trufflehog,
+              gitleaks, git-dumper, wpscan, amass, subfinder, dnsx, dig,
+              whois, kerbrute, netexec, smbmap, enum4linux-ng, ldapsearch,
+              bloodhound-python, theHarvester, spiderfoot, recon-ng, bbot,
+              katana, arp-scan, zmap, airodump-ng, kismet, …
+  screenshots/ eyewitness, gowitness, aquatone, webscreenshot
+  loot/       hashcat, john, hydra, medusa, legba, ncrack, aircrack-ng,
+              hcxpcapngtool, volatility, volatility3, binwalk, foremost,
+              steghide, stegseek, exiftool, zsteg, pypykatz, lsassy,
               donpapi, dploot, gosecretsdump, nth, haiti, …
   exploitation/ msfconsole, msfvenom, sliver-server, ps-empire, havoc,
-              sqlmap, weevely, evil-winrm, mitm6, coercer, certipy,
-              bloodyAD, ntlmrelayx.py, xsstrike, …
+              pwncat-cs, ligolo-ng, chisel, socat, sqlmap, weevely,
+              evil-winrm, mitm6, coercer, certipy, bloodyAD, dalfox,
+              commix, tplmap, ghauri, jwt_tool, swaks, psexec.py,
+              wmiexec.py, smbexec.py, secretsdump.py, GetNPUsers.py,
+              GetUserSPNs.py, ntlmrelayx.py, xsstrike, …
 """
 
 
