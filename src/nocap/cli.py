@@ -43,6 +43,9 @@ TOOL_SUBDIRS: dict[str, str] = {
     "naabu": "recon",
     "netdiscover": "recon",
     "fping": "recon",
+    "arp-scan": "recon",
+    "zmap": "recon",
+    "unicornscan": "recon",
     # recon: web fuzzing & directory brute-force
     "gobuster": "recon",
     "feroxbuster": "recon",
@@ -75,6 +78,12 @@ TOOL_SUBDIRS: dict[str, str] = {
     "robotstester": "recon",
     "patator": "recon",
     "ssh-audit": "recon",
+    "gospider": "recon",
+    "cariddi": "recon",
+    "searchsploit": "recon",
+    "trufflehog": "recon",
+    "gitleaks": "recon",
+    "git-dumper": "recon",
     # recon: CMS scanners
     "wpscan": "recon",
     "wpprobe": "recon",
@@ -102,6 +111,8 @@ TOOL_SUBDIRS: dict[str, str] = {
     "dnsrecon": "recon",
     "dnschef": "recon",
     "waybackurls": "recon",
+    "dig": "recon",
+    "whois": "recon",
     # recon: SMB / RPC / LDAP enumeration
     "enum4linux": "recon",
     "enum4linux-ng": "recon",
@@ -159,10 +170,14 @@ TOOL_SUBDIRS: dict[str, str] = {
     # recon: WiFi passive discovery
     "bettercap": "recon",
     "hcxdumptool": "recon",
+    "airodump-ng": "recon",
+    "kismet": "recon",
     # ── screenshots ───────────────────────────────────────────────────────────
     "eyewitness": "screenshots",
     "EyeWitness": "screenshots",
     "gowitness": "screenshots",
+    "aquatone": "screenshots",
+    "webscreenshot": "screenshots",
     # ── loot: password cracking ───────────────────────────────────────────────
     "hashcat": "loot",
     "john": "loot",
@@ -174,6 +189,18 @@ TOOL_SUBDIRS: dict[str, str] = {
     "nth": "loot",             # name-that-hash
     "haiti": "loot",
     "pkcrack": "loot",
+    "ncrack": "loot",
+    "aircrack-ng": "loot",
+    "hcxpcapngtool": "loot",
+    # loot: forensics & steganography
+    "volatility": "loot",
+    "volatility3": "loot",
+    "binwalk": "loot",
+    "foremost": "loot",
+    "steghide": "loot",
+    "stegseek": "loot",
+    "exiftool": "loot",
+    "zsteg": "loot",
     # loot: credential dumping & extraction
     "pypykatz": "loot",
     "lsassy": "loot",
@@ -197,6 +224,11 @@ TOOL_SUBDIRS: dict[str, str] = {
     "havoc": "exploitation",
     "Villain.py": "exploitation",
     "pwncat-vl": "exploitation",
+    "pwncat-cs": "exploitation",
+    # exploitation: tunneling & pivoting
+    "ligolo-ng": "exploitation",
+    "chisel": "exploitation",
+    "socat": "exploitation",
     # exploitation: web
     "sqlmap": "exploitation",
     "weevely": "exploitation",
@@ -218,6 +250,12 @@ TOOL_SUBDIRS: dict[str, str] = {
     "token-exploiter": "exploitation",
     "XXEinjector": "exploitation",
     "php_filter_chain_generator": "exploitation",
+    "dalfox": "exploitation",
+    "commix": "exploitation",
+    "tplmap": "exploitation",
+    "ghauri": "exploitation",
+    "jwt_tool": "exploitation",
+    "swaks": "exploitation",
     # exploitation: AD / Windows
     "evil-winrm": "exploitation",
     "evil-winrm-py": "exploitation",
@@ -249,6 +287,15 @@ TOOL_SUBDIRS: dict[str, str] = {
     "sccmsecrets.py": "exploitation",
     "pywsus.py": "exploitation",
     "pygpoabuse.py": "exploitation",
+    # exploitation: impacket lateral movement
+    "psexec.py": "exploitation",
+    "wmiexec.py": "exploitation",
+    "smbexec.py": "exploitation",
+    "atexec.py": "exploitation",
+    "dcomexec.py": "exploitation",
+    "secretsdump.py": "exploitation",
+    "GetNPUsers.py": "exploitation",
+    "GetUserSPNs.py": "exploitation",
 }
 
 # Flags whose *next* token is a value to be consumed (not added to filename)
