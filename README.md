@@ -45,6 +45,7 @@ pipx install ./nocap
 cap [options] [subdir] <command> [args...]
 cap last
 cap ls [subdir]
+cap update
 ```
 
 ### Options
@@ -62,6 +63,7 @@ cap ls [subdir]
 |---|---|
 | `cap last` | Print the path of the last captured file |
 | `cap ls [subdir]` | Browse captures interactively (fzf) or list them |
+| `cap update` | Update nocap to the latest version via pipx |
 
 ---
 
@@ -190,6 +192,17 @@ highlighting when installed, otherwise **cat**.
 cap ls             # all files under current engagement dir, newest first
 cap ls recon       # scoped to recon/ subdir
 ```
+
+---
+
+## Updating
+
+```bash
+cap update
+```
+
+Re-installs nocap from the latest commit on GitHub using `pipx install --force`.
+Requires pipx (the same tool used to install nocap).
 
 ---
 

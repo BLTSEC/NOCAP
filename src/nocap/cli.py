@@ -506,6 +506,17 @@ def _cmd_last() -> None:
         sys.exit(1)
 
 
+def _cmd_update() -> None:
+    """Re-install nocap from GitHub via pipx."""
+    if not shutil.which("pipx"):
+        print("nocap: pipx not found — install pipx or update manually", file=sys.stderr)
+        sys.exit(1)
+    sys.exit(subprocess.run([
+        "pipx", "install", "--force",
+        "git+https://github.com/BLTSEC/NOCAP.git",
+    ]).returncode)
+
+
 def _cmd_ls(subdir: str = "") -> None:
     """List captures for the current engagement, optionally scoped to a subdir."""
     base = _get_base_dir() or Path.cwd()
@@ -550,6 +561,7 @@ Usage:
   cap [options] [subdir] <command> [args...]
   cap last
   cap ls [subdir]
+  cap update
   cap --help | --version
 
 Options:
@@ -561,6 +573,7 @@ Options:
 Subcommands:
   last                  Print path of the last captured file
   ls [subdir]           Browse captures interactively (fzf) or list them
+  update                Update nocap to the latest version via pipx
 
 Subdirs:
   recon, loot, exploitation, screenshots, notes
@@ -604,7 +617,7 @@ def main(argv: list[str] | None = None) -> None:
         print(USAGE)
         sys.exit(0)
 
-    if args[0] in ("-V", "--version"):
+    if args[0] in ("-V", "-v", "--version"):
         from nocap import __version__
         print(f"nocap {__version__}")
         sys.exit(0)
@@ -612,6 +625,10 @@ def main(argv: list[str] | None = None) -> None:
     # Subcommands
     if args[0] == "last":
         _cmd_last()
+        return
+
+    if args[0] == "update":
+        _cmd_update()
         return
 
     if args[0] == "ls":
