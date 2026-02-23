@@ -147,9 +147,24 @@ cap -a notes nmap -sCV 10.10.10.5
 
 | Subdir | Tools |
 |---|---|
-| `recon` | nmap, rustscan, masscan, gobuster, feroxbuster, ffuf, wfuzz, whatweb, nikto, enum4linux, ldapsearch, dnsx, subfinder, amass, kerbrute, netexec, crackmapexec, smbclient, rpcclient, snmpwalk, showmount, wpscan, sqlmap, dirsearch, onesixtyone, dnsrecon |
-| `loot` | hashcat, john, hydra, medusa |
-| `exploitation` | msfconsole, msfvenom |
+| `recon` | **Network:** nmap, rustscan, masscan, autorecon, naabu, udpx, netdiscover, fping |
+| | **Web fuzzing:** gobuster, feroxbuster, ffuf, wfuzz, dirsearch, dirb, arjun, kr |
+| | **Web scanning:** whatweb, nikto, nuclei, httpx, httprobe, hakrawler, katana, gau, bbot, uncover, patator, ssh-audit |
+| | **CMS:** wpscan, wpprobe, joomscan, droopescan, drupwn, cmsmap, moodlescan |
+| | **SSL/TLS:** testssl, sslscan, wafw00f, cors_scan |
+| | **DNS/Subdomain:** dnsx, amass, subfinder, sublist3r, findomain, assetfinder, massdns, shuffledns, fierce, dnsenum, dnsrecon, dnschef, waybackurls |
+| | **SMB/LDAP/AD:** enum4linux, enum4linux-ng, ldapsearch, smbclient, smbmap, smbclientng, rpcclient, windapsearch, ldeep, pywerview, godap, manspider, msprobe, adidnsdump, daclsearch, nbtscan, smtp-user-enum, pysnaffler |
+| | **SNMP/NFS:** snmpwalk, onesixtyone, showmount |
+| | **Kerberos/AD collection:** kerbrute, netexec, crackmapexec, sprayhound, smartbrute, ldapdomaindump, bloodhound-python, rusthound, rusthound-ce |
+| | **OSINT:** theHarvester, recon-ng, spiderfoot, sherlock, maigret, holehe, ghunt, phoneinfoga, censys, GitFive, photon, finalrecon, maltego |
+| | **Cloud:** scout, cloudsplaining, prowler, cloudmapper.py |
+| | **WiFi:** bettercap, hcxdumptool |
+| `screenshots` | eyewitness, EyeWitness, gowitness |
+| `loot` | **Cracking:** hashcat, john, hydra, medusa, legba, fcrackzip, pdfcrack, nth, haiti, pkcrack |
+| | **Dumping:** pypykatz, lsassy, donpapi, gosecretsdump, dploot, masky, crackhound, keytabextract, PCredz, firefox_decrypt |
+| `exploitation` | **C2/Frameworks:** msfconsole, msfvenom, msfdb, sliver-server, sliver-client, ps-empire, havoc, Villain.py, pwncat-vl, routersploit |
+| | **Web:** sqlmap, weevely, xsstrike, nosqlmap, gopherus, ssrfmap, ysoserial, phpggc, XXEinjector, php_filter_chain_generator, jdwp-shellifier, byp4xx, h2csmuggler, smuggler, tomcatWarDeployer, clusterd, token-exploiter |
+| | **AD/Windows:** evil-winrm, evil-winrm-py, mitm6, ntlmrelayx.py, krbrelayx.py, aclpwn, coercer, petitpotam.py, dfscoerce.py, shadowcoerce.py, pywhisker, targetedKerberoast.py, bloodyAD, autobloody, gpoddity, goexec, certipy, noPac.py, pre2k, passthecert.py, sccmhunter.py, pxethief, remotemonologue.py |
 
 ---
 
@@ -249,10 +264,10 @@ NOCAP integrates with the standard engagement layout:
 
 ```
 /workspace/<target>/
-├── recon/           ← nmap, gobuster, feroxbuster output
-├── exploitation/    ← payloads, custom scripts
-├── loot/            ← hashes, creds, exfiltrated files
-├── screenshots/     ← evidence
+├── recon/           ← scanning, enumeration, OSINT output
+├── exploitation/    ← C2 sessions, payloads, AD attacks
+├── loot/            ← cracked hashes, dumped credentials
+├── screenshots/     ← eyewitness, gowitness output
 └── notes/           ← operator notes
 ```
 
