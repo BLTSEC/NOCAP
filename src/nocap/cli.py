@@ -270,7 +270,7 @@ _URL_RE = re.compile(r"^https?://")
 _NUM_RE = re.compile(r"^\d+(,\d+)*$")
 
 # Strip ANSI escape codes for clean text matching in summary search
-_ANSI_RE = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
+_ANSI_RE = re.compile(r"\x1b\[[?!0-9;]*[a-zA-Z]")
 
 # Named smart patterns for `cap summary <keyword>`
 _SUMMARY_PATTERNS: dict[str, re.Pattern[str]] = {
