@@ -11,6 +11,7 @@ import fcntl
 import os
 import re
 import select
+import shlex
 import shutil
 import signal
 import struct
@@ -304,7 +305,7 @@ _SUMMARY_PATTERNS: dict[str, re.Pattern[str]] = {
     ),
 }
 
-_LAST_FILE = Path("/tmp/.nocap_last")
+_LAST_FILE = Path.home() / ".cache" / "nocap" / "last"
 
 # ---------------------------------------------------------------------------
 # Engagement directory resolution
@@ -566,7 +567,7 @@ def _cmd_open() -> None:
     path = _last_path()
     editor = os.environ.get("EDITOR", "").strip()
     if editor:
-        subprocess.run(editor.split() + [str(path)])
+        subprocess.run(shlex.split(editor) + [str(path)])
     elif shutil.which("bat"):
         subprocess.run(["bat", "--paging=always", "--color=always", str(path)])
     elif shutil.which("less"):
@@ -894,6 +895,7 @@ def _main(argv: list[str] | None = None) -> None:
     elapsed = (datetime.now() - start).total_seconds()
 
     # Track last captured file for `cap last`
+    _LAST_FILE.parent.mkdir(parents=True, exist_ok=True)
     _LAST_FILE.write_text(str(outfile))
 
     # Bell — audible/visual alert that the command has finished
