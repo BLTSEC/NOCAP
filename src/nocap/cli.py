@@ -691,6 +691,13 @@ Auto-routing (--auto / -a):
 
 
 def main(argv: list[str] | None = None) -> None:
+    try:
+        _main(argv)
+    except KeyboardInterrupt:
+        sys.exit(130)
+
+
+def _main(argv: list[str] | None = None) -> None:
     args = list(argv) if argv is not None else sys.argv[1:]
 
     if not args or args[0] in ("-h", "--help"):
