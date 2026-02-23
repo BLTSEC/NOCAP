@@ -59,6 +59,7 @@ TOOL_SUBDIRS: dict[str, str] = {
     "nuclei": "recon",
     "httpx": "recon",
     "httprobe": "recon",
+    "http": "recon",            # httpie
     "hakrawler": "recon",
     "katana": "recon",
     "gau": "recon",
