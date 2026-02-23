@@ -181,7 +181,7 @@ cap --auto hashcat -m 1000 hashes.txt /wl.txt
 An explicit subdir always takes precedence over `--auto`:
 
 ```bash
-cap -a notes nmap -sCV 10.10.10.5
+cap -s notes nmap -sCV 10.10.10.5
 # → /workspace/10.10.10.5/notes/nmap_sCV.txt
 ```
 
