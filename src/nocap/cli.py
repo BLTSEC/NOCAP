@@ -497,13 +497,85 @@ def _run_pty(cmd: list[str], outfile: Path) -> int:
 # Subcommands
 # ---------------------------------------------------------------------------
 
-def _cmd_last() -> None:
-    """Print the path of the last captured file."""
-    if _LAST_FILE.exists():
-        print(_LAST_FILE.read_text().strip())
-    else:
+def _last_path() -> Path:
+    """Return the path of the last captured file, or exit with an error."""
+    if not _LAST_FILE.exists():
         print("nocap: no captures yet", file=sys.stderr)
         sys.exit(1)
+    return Path(_LAST_FILE.read_text().strip())
+
+
+def _cmd_last() -> None:
+    """Print the path of the last captured file."""
+    print(_last_path())
+
+
+def _cmd_cat() -> None:
+    """Dump the last captured file to stdout."""
+    path = _last_path()
+    if shutil.which("bat"):
+        subprocess.run(["bat", "--paging=never", "--color=always", "--style=plain", str(path)])
+    else:
+        subprocess.run(["cat", str(path)])
+
+
+def _cmd_tail() -> None:
+    """Follow the last captured file from the beginning (useful while a scan runs)."""
+    path = _last_path()
+    subprocess.run(["tail", "-n", "+1", "-f", str(path)])
+
+
+def _cmd_open() -> None:
+    """Open the last captured file in the best available viewer."""
+    path = _last_path()
+    editor = os.environ.get("EDITOR", "").strip()
+    if editor:
+        subprocess.run(editor.split() + [str(path)])
+    elif shutil.which("bat"):
+        subprocess.run(["bat", "--paging=always", "--color=always", str(path)])
+    elif shutil.which("less"):
+        subprocess.run(["less", "-R", str(path)])
+    else:
+        subprocess.run(["cat", str(path)])
+
+
+def _cmd_rm() -> None:
+    """Delete the last captured file."""
+    path = _last_path()
+    path.unlink(missing_ok=True)
+    _LAST_FILE.unlink(missing_ok=True)
+    print(f"\033[90m[rm] {path}\033[0m", file=sys.stderr)
+
+
+def _cmd_summary() -> None:
+    """Print a compact summary table of all captures for the current engagement."""
+    base = _get_base_dir() or Path.cwd()
+    files = sorted(base.rglob("*.txt"), key=lambda f: f.stat().st_mtime, reverse=True)
+    if not files:
+        print(f"nocap: no captures in {base}", file=sys.stderr)
+        sys.exit(1)
+
+    rows = []
+    for f in files:
+        stat = f.stat()
+        mtime = datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M")
+        size = stat.st_size
+        size_str = f"{size / 1024:.1f}K" if size >= 1024 else f"{size}B"
+        try:
+            with f.open("rb") as fh:
+                lines = fh.read().count(b"\n")
+        except Exception:
+            lines = 0
+        try:
+            rel = str(f.relative_to(base))
+        except ValueError:
+            rel = str(f)
+        rows.append((mtime, lines, size_str, rel))
+
+    line_w = max(len(str(r[1])) for r in rows)
+    size_w = max(len(r[2]) for r in rows)
+    for mtime, lines, size_str, rel in rows:
+        print(f"\033[90m{mtime}\033[0m  {lines:{line_w}} lines  {size_str:{size_w}}  {rel}")
 
 
 def _cmd_update() -> None:
@@ -559,7 +631,7 @@ NOCAP — Capture tool output. No cap.
 
 Usage:
   cap [options] [subdir] <command> [args...]
-  cap last
+  cap last | cat | tail | open | rm | summary
   cap ls [subdir]
   cap update
   cap --help | --version
@@ -572,8 +644,16 @@ Options:
 
 Subcommands:
   last                  Print path of the last captured file
+  cat                   Dump last capture to stdout (bat or cat)
+  tail                  Follow last capture from the start (tail -f)
+  open                  Open last capture in $EDITOR / bat / less / cat
+  rm                    Delete the last captured file
+  summary               Table of all captures: timestamp, lines, size, path
   ls [subdir]           Browse captures interactively (fzf) or list them
   update                Update nocap to the latest version via pipx
+
+Environment:
+  NOCAP_AUTO=1          Enable --auto routing by default (no flag needed)
 
 Subdirs:
   recon, loot, exploitation, screenshots, notes
@@ -627,6 +707,26 @@ def main(argv: list[str] | None = None) -> None:
         _cmd_last()
         return
 
+    if args[0] == "cat":
+        _cmd_cat()
+        return
+
+    if args[0] == "tail":
+        _cmd_tail()
+        return
+
+    if args[0] == "open":
+        _cmd_open()
+        return
+
+    if args[0] == "rm":
+        _cmd_rm()
+        return
+
+    if args[0] == "summary":
+        _cmd_summary()
+        return
+
     if args[0] == "update":
         _cmd_update()
         return
@@ -638,7 +738,8 @@ def main(argv: list[str] | None = None) -> None:
 
     # Parse nocap-specific flags (must come before subdir / command)
     note = ""
-    auto_route = False
+    _env_auto = os.environ.get("NOCAP_AUTO", "").strip().lower()
+    auto_route = bool(_env_auto) and _env_auto not in ("0", "false", "no")  # honour env default
     dry_run = False
     subdir = ""
 
@@ -704,13 +805,23 @@ def main(argv: list[str] | None = None) -> None:
 
     print(f"\033[90m[cap] → {outfile}\033[0m", file=sys.stderr)
 
+    start = datetime.now()
     exit_code = _run_pty(cmd, outfile)
+    elapsed = (datetime.now() - start).total_seconds()
 
     # Track last captured file for `cap last`
     _LAST_FILE.write_text(str(outfile))
 
     # Bell — audible/visual alert that the command has finished
     sys.stderr.write("\a")
+    sys.stderr.flush()
+
+    # Completion status: ✓/✗ + elapsed time
+    if exit_code == 0:
+        mark = "\033[32m✓\033[0m"
+    else:
+        mark = f"\033[31m✗ {exit_code}\033[0m"
+    sys.stderr.write(f"\033[90m[{mark}\033[90m] {outfile.name}  ({elapsed:.1f}s)\033[0m\n")
     sys.stderr.flush()
 
     sys.exit(exit_code)

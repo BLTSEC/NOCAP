@@ -9,8 +9,9 @@
 
 NOCAP is a zero-dependency command capture wrapper built for security operators.
 Drop it in front of any tool and it handles the rest: smart file naming, engagement
-directory routing, collision avoidance, live TTY output, bell notifications, and
-interactive capture browsing. No more `| tee recon/nmap-sCV.txt` one-liners.
+directory routing, auto subdir routing, collision avoidance, live TTY output,
+completion status with elapsed time, and interactive capture browsing.
+No more `| tee recon/nmap-sCV.txt` one-liners.
 
 ```bash
 # $TARGET set or pentest_* tmux session active → routes to /workspace/<target>/
@@ -43,7 +44,7 @@ pipx install ./nocap
 
 ```
 cap [options] [subdir] <command> [args...]
-cap last
+cap last | cat | tail | open | rm | summary
 cap ls [subdir]
 cap update
 ```
@@ -62,8 +63,19 @@ cap update
 | Command | Description |
 |---|---|
 | `cap last` | Print the path of the last captured file |
+| `cap cat` | Dump last capture to stdout (`bat` or `cat`) |
+| `cap tail` | Follow last capture from the start — useful while a scan runs in another pane |
+| `cap open` | Open last capture in `$EDITOR`, then `bat`, `less -R`, or `cat` |
+| `cap rm` | Delete the last captured file |
+| `cap summary` | Compact table of all captures: timestamp, line count, size, path |
 | `cap ls [subdir]` | Browse captures interactively (fzf) or list them |
 | `cap update` | Update nocap to the latest version via pipx |
+
+### Environment
+
+| Variable | Description |
+|---|---|
+| `NOCAP_AUTO=1` | Enable `--auto` subdir routing by default without the flag |
 
 ---
 
@@ -78,7 +90,7 @@ cap recon gobuster dir -u http://10.10.10.5 -w /wordlist.txt
 cap loot hashcat -m 1000 hashes.txt /wordlist.txt
 
 # Custom subdir (created automatically if it doesn't exist)
-cap -s pivoting ping -c 4 192.168.1.1
+cap -s pivoting chisel client 10.10.14.5:8080 R:socks
 cap -s ad-enum bloodhound-python -u user -p pass -d corp.local
 
 # Add a note to distinguish runs with the same flags
@@ -88,19 +100,31 @@ cap -n authenticated feroxbuster -u http://10.10.10.5 -x php,html
 # Auto-routing: infers subdir from the tool name
 cap --auto nmap -sCV 10.10.10.5       # → recon/nmap_sCV.txt
 cap --auto hashcat -m 1000 h.txt wl   # → loot/hashcat_m_1000.txt
+cap --auto msfconsole                 # → exploitation/msfconsole.txt
+
+# NOCAP_AUTO=1: make auto-routing the default, no flag needed
+export NOCAP_AUTO=1
+cap nmap -sCV 10.10.10.5             # → recon/ automatically
 
 # Preview routing without running
 cap -D feroxbuster -u http://10.10.10.5
 
-# Reference the last captured file
-cap last
-cat $(cap last)
-cp $(cap last) ~/report/
+# Work with the last captured file
+cap last                             # print the path
+cap cat                              # dump to stdout
+cap tail                             # follow live — watch a scan from another pane
+cap open                             # open in $EDITOR / bat / less
+cap rm                               # delete it
 grep -i password $(cap last)
+cp $(cap last) ~/report/evidence.txt
 
-# Browse captures
-cap ls             # all captures for current target
-cap ls recon       # scoped to recon/
+# Engagement overview
+cap summary                          # timestamp, lines, size, path for all captures
+cap ls                               # interactive fzf browser
+cap ls recon                         # scoped to recon/
+
+# Update to latest
+cap update
 ```
 
 ---
@@ -129,6 +153,18 @@ cap nmap -sCV 10.10.10.5
 
 With `--auto` / `-a`, NOCAP infers the engagement subdir from the tool name.
 Default behavior (without the flag) writes to cwd — no routing is applied.
+
+Set `NOCAP_AUTO=1` to make auto-routing the default for every capture without
+typing the flag:
+
+```bash
+export NOCAP_AUTO=1
+cap nmap -sCV 10.10.10.5       # → recon/ automatically
+cap hashcat -m 1000 h.txt wl   # → loot/ automatically
+```
+
+Add it to your shell profile (`.zshrc`, `.bashrc`) or Exegol's shell init to
+make it permanent.
 
 ```bash
 cap --auto nmap -sCV 10.10.10.5
@@ -170,14 +206,34 @@ cap -a notes nmap -sCV 10.10.10.5
 
 ---
 
-## `cap last`
+## `cap last` / `cat` / `tail` / `open` / `rm`
 
-Prints the path of the most recently captured file. Compose naturally with other tools:
+All last-file subcommands operate on the most recently captured file.
 
 ```bash
-cat $(cap last)
+cap last                    # print the path
+cap cat                     # dump to stdout (bat or cat)
+cap tail                    # follow from the start — watch a running scan
+cap open                    # open in $EDITOR / bat / less -R / cat
+cap rm                      # delete the capture
+
+# Compose last with other tools
 grep -i password $(cap last)
 cp $(cap last) ~/report/evidence.txt
+```
+
+`cap open` picks the best available viewer in order: `$EDITOR` → `bat` → `less -R` → `cat`.
+
+---
+
+## `cap summary`
+
+Prints a compact table of all captures for the current engagement — timestamp, line count, size, and relative path:
+
+```
+2026-02-23 14:32  1234 lines   45.2K  recon/nmap_sCV.txt
+2026-02-23 14:28   892 lines   28.1K  recon/gobuster_dir.txt
+2026-02-23 13:55   310 lines    9.8K  loot/hashcat_m_1000.txt
 ```
 
 ---
@@ -257,17 +313,30 @@ normal terminal — colours, progress bars, and interactive prompts all work.
 
 ---
 
-## Bell Notification
+## Completion Status
 
-NOCAP fires a bell (`\a`) when a command completes, so you can task-switch freely
-in tmux and get notified when a long scan finishes.
+When a command finishes, NOCAP prints a one-line summary with exit status and elapsed time:
+
+```
+[✓] nmap_sCV.txt  (12.3s)
+[✗ 1] feroxbuster_x_php.txt  (0.4s)
+```
+
+A bell (`\a`) also fires on completion so you can task-switch in tmux and get
+notified when a long scan finishes.
 
 ---
 
 ## Zero Dependencies
 
 Standard library only. Python 3.9+. No third-party packages required.
-(`cap ls` optionally uses **fzf** and **bat** if they are on your PATH.)
+Optional enhancements if present on your PATH:
+
+| Tool | Used by |
+|---|---|
+| **fzf** | `cap ls` — interactive file browser with preview |
+| **bat** | `cap cat`, `cap open`, `cap ls` preview — syntax-aware output |
+| **less** | `cap open` — fallback pager if bat is not installed |
 
 ---
 
