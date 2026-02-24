@@ -15,6 +15,7 @@ No more `| tee recon/nmap-sCV.txt` one-liners.
 
 ```bash
 # $TARGET set or pentest_* tmux session active → routes to /workspace/<target>/
+export TARGET=10.10.10.5
 cap nmap -sCV 10.10.10.5
 # → /workspace/10.10.10.5/nmap_sCV.txt
 
