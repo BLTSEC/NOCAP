@@ -94,12 +94,20 @@ def _get_version() -> str:
 
 def _get_base_dir() -> Path | None:
     """Return /workspace/<target> (or $NOCAP_WORKSPACE/<target>) from $TARGET
-    or the active tmux session name, else None."""
-    workspace = os.environ.get("NOCAP_WORKSPACE", "/workspace").rstrip("/")
+    or the active tmux session name, else None.
+
+    Returns None if the workspace root does not exist so callers fall back to
+    cwd gracefully instead of crashing on read-only or missing mounts.
+    """
+    workspace = Path(os.environ.get("NOCAP_WORKSPACE", "/workspace").rstrip("/"))
+
+    # Bail out early if the workspace root isn't accessible
+    if not workspace.is_dir():
+        return None
 
     target = os.environ.get("TARGET", "").strip()
     if target:
-        return Path(workspace) / target
+        return workspace / target
 
     try:
         result = subprocess.run(
@@ -109,7 +117,7 @@ def _get_base_dir() -> Path | None:
         sess = result.stdout.strip()
         if sess.startswith("pentest_"):
             tgt = sess.removeprefix("pentest_").replace("_", ".")
-            return Path(workspace) / tgt
+            return workspace / tgt
     except Exception:
         pass
 
