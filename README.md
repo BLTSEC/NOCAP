@@ -68,7 +68,7 @@ cap update
 | `cap open` | Open last capture in `$EDITOR`, then `bat`, `less -R`, or `cat` |
 | `cap rm` | Delete the last captured file |
 | `cap summary [keyword]` | Compact table of all captures, or search across them by keyword |
-| `cap ls [subdir]` | Browse captures interactively (fzf) or list them |
+| `cap ls [subdir]` | Browse captures interactively (fzf) or list them. Accepts any subdir name. |
 | `cap update` | Update nocap to the latest version via pipx |
 
 ### Environment
@@ -76,6 +76,7 @@ cap update
 | Variable | Description |
 |---|---|
 | `NOCAP_AUTO=1` | Enable `--auto` subdir routing by default without the flag |
+| `NOCAP_WORKSPACE=path` | Override the base workspace directory (default: `/workspace`) |
 
 ---
 
@@ -96,6 +97,10 @@ cap -s ad-enum bloodhound-python -u user -p pass -d corp.local
 # Add a note to distinguish runs with the same flags
 cap -n after-creds nmap -sCV 10.10.10.5
 cap -n authenticated feroxbuster -u http://10.10.10.5 -x php,html
+
+# Combined short flags
+cap -an after-creds nmap -sCV 10.10.10.5    # -a and -n together
+cap -aD nmap -sCV 10.10.10.5               # dry-run with auto routing
 
 # Auto-routing: infers subdir from the tool name
 cap --auto nmap -sCV 10.10.10.5       # → recon/nmap_sCV.txt
@@ -126,6 +131,7 @@ cap summary ports                    # open ports from all nmap/scan output
 cap summary admin                    # literal keyword search
 cap ls                               # interactive fzf browser
 cap ls recon                         # scoped to recon/
+cap ls pivoting                      # any custom subdir works
 
 # Update to latest
 cap update
@@ -139,9 +145,18 @@ NOCAP resolves your engagement directory automatically — no configuration need
 
 | Priority | Condition | Output location |
 |---|---|---|
-| 1 | `$TARGET` env var is set | `/workspace/$TARGET/<subdir>/` |
-| 2 | Active tmux session named `pentest_*` | `/workspace/<target>/<subdir>/` |
+| 1 | `$TARGET` env var is set | `$NOCAP_WORKSPACE/$TARGET/<subdir>/` |
+| 2 | Active tmux session named `pentest_*` | `$NOCAP_WORKSPACE/<target>/<subdir>/` |
 | 3 | Fallback | `./<subdir>/` (current directory) |
+
+The workspace root defaults to `/workspace` and can be overridden:
+
+```bash
+export NOCAP_WORKSPACE=/ops
+export TARGET=10.10.10.5
+cap nmap -sCV 10.10.10.5
+# → /ops/10.10.10.5/nmap_sCV.txt
+```
 
 Set `TARGET` manually for non-tmux workflows:
 
@@ -285,9 +300,12 @@ Lists all captures for the current engagement. Uses **fzf** with file preview if
 available (falls back to a plain listing if not). Preview uses **bat** for syntax
 highlighting when installed, otherwise **cat**.
 
+The subdir argument accepts any directory name — not just the built-in ones:
+
 ```bash
 cap ls             # all files under current engagement dir, newest first
 cap ls recon       # scoped to recon/ subdir
+cap ls pivoting    # any custom subdir works
 ```
 
 ---
@@ -319,7 +337,7 @@ Meaningful flags and subcommands become the filename.
 | `cap loot hashcat -m 1000 hashes.txt /wl.txt` | `loot/hashcat_m_1000.txt` |
 | `cap -n after-creds nmap -sCV 10.10.10.5` | `nmap_sCV_after-creds.txt` |
 
-Collisions are resolved automatically:
+Collisions are resolved automatically and atomically (race-safe):
 
 ```
 nmap_sCV.txt → nmap_sCV_2.txt → nmap_sCV_3.txt
@@ -393,6 +411,22 @@ NOCAP integrates with the standard engagement layout:
 ├── screenshots/     ← eyewitness, gowitness output
 └── notes/           ← operator notes
 ```
+
+---
+
+## Development
+
+```bash
+git clone https://github.com/BLTSEC/nocap
+cd nocap
+pipx install -e ".[dev]"   # installs nocap + pytest in editable mode
+
+# or just run tests without installing:
+PYTHONPATH=src pytest tests/ -v
+```
+
+Tests cover filename generation (`tests/test_filename.py`) and argument
+parsing (`tests/test_parsing.py`).
 
 ---
 

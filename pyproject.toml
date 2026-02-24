@@ -18,5 +18,12 @@ cap = "nocap.cli:main"
 Homepage = "https://github.com/BLTSEC/nocap"
 Repository = "https://github.com/BLTSEC/nocap"
 
+[project.optional-dependencies]
+dev = ["pytest>=7"]
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/nocap"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

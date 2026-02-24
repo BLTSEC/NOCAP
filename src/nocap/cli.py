@@ -7,6 +7,7 @@ auto-named file with smart engagement directory routing.
 
 from __future__ import annotations
 
+import argparse
 import fcntl
 import os
 import re
@@ -19,300 +20,18 @@ import subprocess
 import sys
 import termios
 import tty
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
+from typing import Callable
+
+from nocap.tools import SKIP_FLAGS, SUBDIRS, TOOL_SUBDIRS
 
 __all__ = ["main"]
 
 # ---------------------------------------------------------------------------
-# Constants
+# Regex helpers
 # ---------------------------------------------------------------------------
-
-SUBDIRS = frozenset({"recon", "loot", "exploitation", "screenshots", "notes"})
-
-# Auto tool→subdir routing (opt-in via --auto / -a)
-TOOL_SUBDIRS: dict[str, str] = {
-    # ── recon: network scanning & port discovery ─────────────────────────────
-    "nmap": "recon",
-    "nmap-parse-output": "recon",
-    "rustscan": "recon",
-    "masscan": "recon",
-    "autorecon": "recon",
-    "udpx": "recon",
-    "divideandscan": "recon",
-    "naabu": "recon",
-    "netdiscover": "recon",
-    "fping": "recon",
-    "arp-scan": "recon",
-    "zmap": "recon",
-    "unicornscan": "recon",
-    # recon: web fuzzing & directory brute-force
-    "gobuster": "recon",
-    "feroxbuster": "recon",
-    "ffuf": "recon",
-    "wfuzz": "recon",
-    "dirsearch": "recon",
-    "dirb": "recon",
-    "arjun": "recon",
-    "kr": "recon",            # kiterunner
-    "wuzz": "recon",
-    # recon: web fingerprinting & active scanning
-    "whatweb": "recon",
-    "nikto": "recon",
-    "nuclei": "recon",
-    "httpx": "recon",
-    "httprobe": "recon",
-    "http": "recon",            # httpie
-    "curl": "recon",
-    "wget": "recon",
-    "hakrawler": "recon",
-    "katana": "recon",
-    "gau": "recon",
-    "bbot": "recon",
-    "uncover": "recon",
-    "chaos": "recon",
-    "alterx": "recon",
-    "hakrevdns": "recon",
-    "jsluice": "recon",
-    "linkfinder": "recon",
-    "robotstester": "recon",
-    "patator": "recon",
-    "ssh-audit": "recon",
-    "gospider": "recon",
-    "cariddi": "recon",
-    "searchsploit": "recon",
-    "trufflehog": "recon",
-    "gitleaks": "recon",
-    "git-dumper": "recon",
-    # recon: CMS scanners
-    "wpscan": "recon",
-    "wpprobe": "recon",
-    "joomscan": "recon",
-    "droopescan": "recon",
-    "drupwn": "recon",
-    "cmsmap": "recon",
-    "moodlescan": "recon",
-    # recon: SSL/TLS & web infra
-    "testssl": "recon",
-    "sslscan": "recon",
-    "wafw00f": "recon",
-    "cors_scan": "recon",
-    # recon: DNS & subdomain enumeration
-    "dnsx": "recon",
-    "massdns": "recon",
-    "shuffledns": "recon",
-    "fierce": "recon",
-    "amass": "recon",
-    "subfinder": "recon",
-    "sublist3r": "recon",
-    "findomain": "recon",
-    "assetfinder": "recon",
-    "dnsenum": "recon",
-    "dnsrecon": "recon",
-    "dnschef": "recon",
-    "waybackurls": "recon",
-    "dig": "recon",
-    "whois": "recon",
-    # recon: SMB / RPC / LDAP enumeration
-    "enum4linux": "recon",
-    "enum4linux-ng": "recon",
-    "ldapsearch": "recon",
-    "smbclient": "recon",
-    "smbmap": "recon",
-    "smbclientng": "recon",
-    "rpcclient": "recon",
-    "windapsearch": "recon",
-    "ldeep": "recon",
-    "pywerview": "recon",
-    "godap": "recon",
-    "manspider": "recon",
-    "msprobe": "recon",
-    "adidnsdump": "recon",
-    "daclsearch": "recon",
-    "nbtscan": "recon",
-    "smtp-user-enum": "recon",
-    "scrtdnsdump": "recon",
-    "pysnaffler": "recon",
-    # recon: SNMP & NFS
-    "snmpwalk": "recon",
-    "snmpenum": "recon",
-    "onesixtyone": "recon",
-    "showmount": "recon",
-    # recon: Kerberos, AD & BloodHound collection
-    "kerbrute": "recon",
-    "netexec": "recon",
-    "crackmapexec": "recon",
-    "sprayhound": "recon",
-    "smartbrute": "recon",
-    "ldapdomaindump": "recon",
-    "bloodhound-python": "recon",
-    "rusthound": "recon",
-    "rusthound-ce": "recon",
-    # recon: OSINT
-    "theHarvester": "recon",
-    "recon-ng": "recon",
-    "spiderfoot": "recon",
-    "finalrecon": "recon",
-    "maltego": "recon",
-    "sherlock": "recon",
-    "maigret": "recon",
-    "holehe": "recon",
-    "ghunt": "recon",
-    "phoneinfoga": "recon",
-    "censys": "recon",
-    "GitFive": "recon",
-    "photon": "recon",
-    # recon: cloud
-    "scout": "recon",          # ScoutSuite
-    "cloudsplaining": "recon",
-    "prowler": "recon",
-    "cloudmapper.py": "recon",
-    # recon: WiFi passive discovery
-    "bettercap": "recon",
-    "hcxdumptool": "recon",
-    "airodump-ng": "recon",
-    "kismet": "recon",
-    # ── screenshots ───────────────────────────────────────────────────────────
-    "eyewitness": "screenshots",
-    "EyeWitness": "screenshots",
-    "gowitness": "screenshots",
-    "aquatone": "screenshots",
-    "webscreenshot": "screenshots",
-    # ── loot: password cracking ───────────────────────────────────────────────
-    "hashcat": "loot",
-    "john": "loot",
-    "hydra": "loot",
-    "medusa": "loot",
-    "legba": "loot",
-    "fcrackzip": "loot",
-    "pdfcrack": "loot",
-    "nth": "loot",             # name-that-hash
-    "haiti": "loot",
-    "pkcrack": "loot",
-    "ncrack": "loot",
-    "aircrack-ng": "loot",
-    "hcxpcapngtool": "loot",
-    # loot: forensics & steganography
-    "volatility": "loot",
-    "volatility3": "loot",
-    "binwalk": "loot",
-    "foremost": "loot",
-    "steghide": "loot",
-    "stegseek": "loot",
-    "exiftool": "loot",
-    "zsteg": "loot",
-    # loot: credential dumping & extraction
-    "pypykatz": "loot",
-    "lsassy": "loot",
-    "DonPAPI": "loot",
-    "donpapi": "loot",
-    "gosecretsdump": "loot",
-    "dploot": "loot",
-    "masky": "loot",
-    "crackhound": "loot",
-    "keytabextract": "loot",
-    "PCredz": "loot",
-    "firefox_decrypt": "loot",
-    # ── exploitation: frameworks & C2 ────────────────────────────────────────
-    "msfconsole": "exploitation",
-    "msfvenom": "exploitation",
-    "msfdb": "exploitation",
-    "routersploit": "exploitation",
-    "sliver-server": "exploitation",
-    "sliver-client": "exploitation",
-    "ps-empire": "exploitation",
-    "havoc": "exploitation",
-    "Villain.py": "exploitation",
-    "pwncat-vl": "exploitation",
-    "pwncat-cs": "exploitation",
-    # exploitation: tunneling & pivoting
-    "ligolo-ng": "exploitation",
-    "chisel": "exploitation",
-    "socat": "exploitation",
-    # exploitation: web
-    "sqlmap": "exploitation",
-    "weevely": "exploitation",
-    "xsstrike": "exploitation",
-    "nosqlmap": "exploitation",
-    "gopherus": "exploitation",
-    "ssrfmap": "exploitation",
-    "bolt": "exploitation",
-    "kadimus": "exploitation",
-    "fuxploider": "exploitation",
-    "ysoserial": "exploitation",
-    "phpggc": "exploitation",
-    "jdwp-shellifier": "exploitation",
-    "byp4xx": "exploitation",
-    "h2csmuggler": "exploitation",
-    "smuggler": "exploitation",
-    "tomcatWarDeployer": "exploitation",
-    "clusterd": "exploitation",
-    "token-exploiter": "exploitation",
-    "XXEinjector": "exploitation",
-    "php_filter_chain_generator": "exploitation",
-    "dalfox": "exploitation",
-    "commix": "exploitation",
-    "tplmap": "exploitation",
-    "ghauri": "exploitation",
-    "jwt_tool": "exploitation",
-    "swaks": "exploitation",
-    # exploitation: AD / Windows
-    "evil-winrm": "exploitation",
-    "evil-winrm-py": "exploitation",
-    "mitm6": "exploitation",
-    "ntlmrelayx.py": "exploitation",
-    "krbrelayx.py": "exploitation",
-    "aclpwn": "exploitation",
-    "coercer": "exploitation",
-    "petitpotam.py": "exploitation",
-    "dfscoerce.py": "exploitation",
-    "shadowcoerce.py": "exploitation",
-    "pywhisker": "exploitation",
-    "targetedKerberoast.py": "exploitation",
-    "bloodyAD": "exploitation",
-    "autobloody": "exploitation",
-    "gpoddity": "exploitation",
-    "goexec": "exploitation",
-    "remotemonologue.py": "exploitation",
-    "sccmhunter.py": "exploitation",
-    "pxethief": "exploitation",
-    "pre2k": "exploitation",
-    "passthecert.py": "exploitation",
-    "certipy": "exploitation",
-    "noPac.py": "exploitation",
-    "privexchange.py": "exploitation",
-    "ms14-068.py": "exploitation",
-    "zerologon-exploit": "exploitation",
-    "abuseACL": "exploitation",
-    "sccmsecrets.py": "exploitation",
-    "pywsus.py": "exploitation",
-    "pygpoabuse.py": "exploitation",
-    # exploitation: impacket lateral movement
-    "psexec.py": "exploitation",
-    "wmiexec.py": "exploitation",
-    "smbexec.py": "exploitation",
-    "atexec.py": "exploitation",
-    "dcomexec.py": "exploitation",
-    "secretsdump.py": "exploitation",
-    "GetNPUsers.py": "exploitation",
-    "GetUserSPNs.py": "exploitation",
-}
-
-# Flags whose *next* token is a value to be consumed (not added to filename)
-SKIP_FLAGS = frozenset({
-    "-w", "--wordlist",
-    "-u", "--url",
-    "-o", "--output",
-    "-oN", "-oX", "-oA", "-oG", "-oS", "-oJ",
-    "-T", "--timeout",
-    "--threads", "-t",
-    "--rate",
-    "-H", "--header",
-    "-d", "--domain",
-    "-f", "--file", "--hash-file",
-    "-mc", "-fc",
-    "-p",
-})
 
 _IP_RE  = re.compile(r"^\d{1,3}(\.\d{1,3}){3}(/\d+)?$")
 _IP6_RE = re.compile(r"^([0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}(/\d+)?$")
@@ -358,14 +77,29 @@ _SUMMARY_PATTERNS: dict[str, re.Pattern[str]] = {
 _LAST_FILE = Path.home() / ".cache" / "nocap" / "last"
 
 # ---------------------------------------------------------------------------
+# Version
+# ---------------------------------------------------------------------------
+
+def _get_version() -> str:
+    try:
+        from importlib.metadata import version
+        return version("nocap")
+    except Exception:
+        from nocap import __version__
+        return __version__
+
+# ---------------------------------------------------------------------------
 # Engagement directory resolution
 # ---------------------------------------------------------------------------
 
 def _get_base_dir() -> Path | None:
-    """Return /workspace/<target> from $TARGET or active tmux session, else None."""
+    """Return /workspace/<target> (or $NOCAP_WORKSPACE/<target>) from $TARGET
+    or the active tmux session name, else None."""
+    workspace = os.environ.get("NOCAP_WORKSPACE", "/workspace").rstrip("/")
+
     target = os.environ.get("TARGET", "").strip()
     if target:
-        return Path("/workspace") / target
+        return Path(workspace) / target
 
     try:
         result = subprocess.run(
@@ -375,7 +109,7 @@ def _get_base_dir() -> Path | None:
         sess = result.stdout.strip()
         if sess.startswith("pentest_"):
             tgt = sess.removeprefix("pentest_").replace("_", ".")
-            return Path("/workspace") / tgt
+            return Path(workspace) / tgt
     except Exception:
         pass
 
@@ -396,36 +130,28 @@ def _build_filename(cmd: list[str], note: str = "") -> str:
             skip_next = False
             continue
 
-        # IPv4 addresses (with optional CIDR)
         if _IP_RE.match(arg):
             continue
-        # IPv6 addresses
         if _IP6_RE.match(arg):
             continue
-        # HTTP/S URLs
         if _URL_RE.match(arg):
             continue
-        # Absolute paths
         if arg.startswith("/"):
             continue
-        # key=path assignments (e.g. RHOSTS=192.168.1.1, module=./local.py)
         if "=" in arg:
             _, _, val = arg.partition("=")
             if val.startswith("/") or val.startswith("./"):
                 continue
-        # Dotted non-flag tokens (hostnames, filenames like wordlist.txt)
         if not arg.startswith("-") and "." in arg:
             continue
-        # Pure numbers or port lists (80, 443, 80,443)
         if _NUM_RE.match(arg):
             continue
-        # Flags that consume the next token as a value
         if arg in SKIP_FLAGS:
             skip_next = True
             continue
 
-        clean = re.sub(r"^-+", "", arg)                # strip leading dashes
-        clean = re.sub(r"[^a-zA-Z0-9_-]", "", clean)  # keep safe chars only
+        clean = re.sub(r"^-+", "", arg)
+        clean = re.sub(r"[^a-zA-Z0-9_-]", "", clean)
         clean = clean[:15]
         if clean:
             parts.append(clean)
@@ -443,17 +169,34 @@ def _build_filename(cmd: list[str], note: str = "") -> str:
 # Output file resolution
 # ---------------------------------------------------------------------------
 
-def _resolve_outfile(outdir: Path, stem: str) -> Path:
-    """Return outdir/stem.txt, auto-incrementing suffix on collision."""
+def _compute_outfile(outdir: Path, stem: str) -> Path:
+    """Return the path that _claim_outfile would create (no filesystem write).
+    Used for dry-run mode only — not race-safe."""
     candidate = outdir / f"{stem}.txt"
     if not candidate.exists():
         return candidate
     n = 2
-    while True:
-        candidate = outdir / f"{stem}_{n}.txt"
-        if not candidate.exists():
-            return candidate
+    while (outdir / f"{stem}_{n}.txt").exists():
         n += 1
+    return outdir / f"{stem}_{n}.txt"
+
+
+def _claim_outfile(outdir: Path, stem: str) -> Path:
+    """Atomically create and return a unique output file path.
+
+    Uses O_CREAT | O_EXCL to guarantee no two concurrent cap invocations
+    claim the same filename (eliminates the TOCTOU race in a plain exists-check).
+    """
+    candidate = outdir / f"{stem}.txt"
+    n = 2
+    while True:
+        try:
+            fd = os.open(str(candidate), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+            os.close(fd)
+            return candidate
+        except FileExistsError:
+            candidate = outdir / f"{stem}_{n}.txt"
+            n += 1
 
 # ---------------------------------------------------------------------------
 # Terminal helpers
@@ -469,6 +212,7 @@ def _term_size() -> tuple[int, int]:
         pass
     return 24, 80
 
+
 def _set_winsize(fd: int, rows: int, cols: int) -> None:
     try:
         ws = struct.pack("HHHH", rows, cols, 0, 0)
@@ -476,13 +220,58 @@ def _set_winsize(fd: int, rows: int, cols: int) -> None:
     except Exception:
         pass
 
+
+@contextmanager
+def _raw_terminal(fd: int):
+    """Context manager: put *fd* in raw mode, restore on exit."""
+    old = termios.tcgetattr(fd)
+    try:
+        tty.setraw(fd)
+        yield
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old)
+
 # ---------------------------------------------------------------------------
 # PTY-based execution
 # ---------------------------------------------------------------------------
 
+def _parent_io_loop(
+    master_fd: int,
+    stdin_fd: int,
+    is_tty: bool,
+    logf,
+) -> None:
+    """Forward PTY output to stdout/logfile; forward stdin to the PTY."""
+    watch_fds = [master_fd, stdin_fd] if is_tty else [master_fd]
+    while True:
+        try:
+            r, _, _ = select.select(watch_fds, [], [], 0.05)
+        except (ValueError, OSError):
+            break
+
+        if master_fd in r:
+            try:
+                data = os.read(master_fd, 4096)
+            except OSError:
+                break
+            if not data:
+                break
+            sys.stdout.buffer.write(data)
+            sys.stdout.buffer.flush()
+            logf.write(data)
+            logf.flush()
+
+        if is_tty and stdin_fd in r:
+            try:
+                data = os.read(stdin_fd, 4096)
+            except OSError:
+                break
+            if data:
+                os.write(master_fd, data)
+
+
 def _run_pty(cmd: list[str], outfile: Path) -> int:
-    """
-    Execute *cmd* under a PTY, appending all output to *outfile* while
+    """Execute *cmd* under a PTY, appending all output to *outfile* while
     also echoing to stdout in real time.  Returns the child's exit code.
 
     Running under a PTY means tools that detect TTY (nmap, gobuster, etc.)
@@ -531,45 +320,14 @@ def _run_pty(cmd: list[str], outfile: Path) -> int:
     is_tty = sys.stdin.isatty()
     exit_code = 0
 
-    # Put our terminal in raw mode so Ctrl+C/Ctrl+Z pass through to the child
-    # via the PTY line discipline rather than being intercepted by our process.
-    if is_tty:
-        old_term = termios.tcgetattr(stdin_fd)
-        tty.setraw(stdin_fd)
-
     try:
         with outfile.open("ab") as logf:
-            watch_fds = [master_fd, stdin_fd] if is_tty else [master_fd]
-
-            while True:
-                try:
-                    r, _, _ = select.select(watch_fds, [], [], 0.05)
-                except (ValueError, OSError):
-                    break
-
-                if master_fd in r:
-                    try:
-                        data = os.read(master_fd, 4096)
-                    except OSError:
-                        break
-                    if not data:
-                        break
-                    sys.stdout.buffer.write(data)
-                    sys.stdout.buffer.flush()
-                    logf.write(data)
-                    logf.flush()
-
-                if is_tty and stdin_fd in r:
-                    try:
-                        data = os.read(stdin_fd, 4096)
-                    except OSError:
-                        break
-                    if data:
-                        os.write(master_fd, data)
-
+            if is_tty:
+                with _raw_terminal(stdin_fd):
+                    _parent_io_loop(master_fd, stdin_fd, is_tty, logf)
+            else:
+                _parent_io_loop(master_fd, stdin_fd, is_tty, logf)
     finally:
-        if is_tty:
-            termios.tcsetattr(stdin_fd, termios.TCSADRAIN, old_term)
         os.close(master_fd)
         signal.signal(signal.SIGWINCH, old_sigwinch)
         try:
@@ -581,52 +339,69 @@ def _run_pty(cmd: list[str], outfile: Path) -> int:
     return exit_code
 
 # ---------------------------------------------------------------------------
-# Subcommands
+# Shared viewer helper
+# ---------------------------------------------------------------------------
+
+def _view_file(path: Path, *, paging: bool = False) -> None:
+    """Display *path* using the best available viewer."""
+    if paging:
+        if shutil.which("bat"):
+            subprocess.run(["bat", "--paging=always", "--color=always", str(path)])
+        elif shutil.which("less"):
+            subprocess.run(["less", "-R", str(path)])
+        else:
+            subprocess.run(["cat", str(path)])
+    else:
+        if shutil.which("bat"):
+            subprocess.run(["bat", "--paging=never", "--color=always", "--style=plain", str(path)])
+        else:
+            subprocess.run(["cat", str(path)])
+
+# ---------------------------------------------------------------------------
+# Last-file helpers
 # ---------------------------------------------------------------------------
 
 def _last_path() -> Path:
     """Return the path of the last captured file, or exit with an error."""
+    if _LAST_FILE.is_symlink():
+        print("nocap: last-file pointer is a symlink — refusing", file=sys.stderr)
+        sys.exit(1)
     if not _LAST_FILE.exists():
         print("nocap: no captures yet", file=sys.stderr)
         sys.exit(1)
     return Path(_LAST_FILE.read_text().strip())
 
+# ---------------------------------------------------------------------------
+# Subcommands
+# ---------------------------------------------------------------------------
 
-def _cmd_last() -> None:
+def _cmd_last(_: list[str] | None = None) -> None:
     """Print the path of the last captured file."""
     print(_last_path())
 
 
-def _cmd_cat() -> None:
+def _cmd_cat(_: list[str] | None = None) -> None:
     """Dump the last captured file to stdout."""
-    path = _last_path()
-    if shutil.which("bat"):
-        subprocess.run(["bat", "--paging=never", "--color=always", "--style=plain", str(path)])
-    else:
-        subprocess.run(["cat", str(path)])
+    _view_file(_last_path())
 
 
-def _cmd_tail() -> None:
-    """Follow the last captured file from the beginning (useful while a scan runs)."""
+def _cmd_tail(_: list[str] | None = None) -> None:
+    """Follow the last captured file from the beginning."""
     path = _last_path()
     subprocess.run(["tail", "-n", "+1", "-f", str(path)])
 
 
-def _cmd_open() -> None:
+def _cmd_open(_: list[str] | None = None) -> None:
     """Open the last captured file in the best available viewer."""
     path = _last_path()
     editor = os.environ.get("EDITOR", "").strip()
     if editor:
         subprocess.run(shlex.split(editor) + [str(path)])
-    elif shutil.which("bat"):
-        subprocess.run(["bat", "--paging=always", "--color=always", str(path)])
-    elif shutil.which("less"):
-        subprocess.run(["less", "-R", str(path)])
     else:
-        subprocess.run(["cat", str(path)])
+        _view_file(path, paging=True)
 
 
-def _cmd_rm() -> None:
+def _cmd_rm(_: list[str] | None = None) -> None:
     """Delete the last captured file."""
     path = _last_path()
     path.unlink(missing_ok=True)
@@ -634,8 +409,22 @@ def _cmd_rm() -> None:
     print(f"\033[90m[rm] {path}\033[0m", file=sys.stderr)
 
 
-def _cmd_summary(keyword: str = "") -> None:
+def _count_lines(path: Path) -> int:
+    """Count newlines in *path* using chunked reads to avoid reading the whole
+    file into memory at once (important for large scan outputs)."""
+    try:
+        with path.open("rb") as fh:
+            return sum(
+                chunk.count(b"\n")
+                for chunk in iter(lambda: fh.read(65536), b"")
+            )
+    except Exception:
+        return 0
+
+
+def _cmd_summary(args: list[str] | None = None) -> None:
     """Print a compact summary table, or search captures for a keyword/pattern."""
+    keyword = (args[0] if args else "")
     base = _get_base_dir() or Path.cwd()
     files = sorted(base.rglob("*.txt"), key=lambda f: f.stat().st_mtime, reverse=True)
     if not files:
@@ -650,11 +439,7 @@ def _cmd_summary(keyword: str = "") -> None:
             mtime = datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M")
             size = stat.st_size
             size_str = f"{size / 1024:.1f}K" if size >= 1024 else f"{size}B"
-            try:
-                with f.open("rb") as fh:
-                    lines = fh.read().count(b"\n")
-            except Exception:
-                lines = 0
+            lines = _count_lines(f)
             try:
                 rel = str(f.relative_to(base))
             except ValueError:
@@ -704,7 +489,7 @@ def _cmd_summary(keyword: str = "") -> None:
         sys.exit(1)
 
 
-def _cmd_update() -> None:
+def _cmd_update(_: list[str] | None = None) -> None:
     """Re-install nocap from GitHub via pipx."""
     if not shutil.which("pipx"):
         print("nocap: pipx not found — install pipx or update manually", file=sys.stderr)
@@ -715,8 +500,9 @@ def _cmd_update() -> None:
     ]).returncode)
 
 
-def _cmd_ls(subdir: str = "") -> None:
+def _cmd_ls(args: list[str] | None = None) -> None:
     """List captures for the current engagement, optionally scoped to a subdir."""
+    subdir = (args[0] if args else "")
     base = _get_base_dir() or Path.cwd()
     search_dir = base / subdir if subdir else base
 
@@ -749,7 +535,45 @@ def _cmd_ls(subdir: str = "") -> None:
             print(f"{mtime}  {size:>8}  {f}")
 
 # ---------------------------------------------------------------------------
-# CLI entry point
+# Subcommand dispatch table
+# ---------------------------------------------------------------------------
+
+_DISPATCH: dict[str, Callable[[list[str]], None]] = {
+    "last":    _cmd_last,
+    "cat":     _cmd_cat,
+    "tail":    _cmd_tail,
+    "open":    _cmd_open,
+    "rm":      _cmd_rm,
+    "summary": _cmd_summary,
+    "update":  _cmd_update,
+    "ls":      _cmd_ls,
+}
+
+# ---------------------------------------------------------------------------
+# Argument parser
+# ---------------------------------------------------------------------------
+
+def _build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(prog="cap", add_help=False, allow_abbrev=False)
+    p.add_argument("-h", "--help", action="store_true", default=False)
+    p.add_argument("-V", "-v", "--version", action="store_true", default=False)
+    p.add_argument("-n", "--note", default="", metavar="LABEL",
+                   help="Append a custom label to the output filename")
+    p.add_argument("-s", "--subdir", default="", metavar="NAME",
+                   help="Write to a custom subdir (created if needed)")
+    p.add_argument("-a", "--auto", action="store_true", default=False,
+                   help="Auto-route to subdir based on tool name")
+    p.add_argument("-D", "--dry-run", dest="dry_run", action="store_true",
+                   default=False, help="Show where output would go without running")
+    p.add_argument("command", nargs=argparse.REMAINDER)
+    return p
+
+
+# Module-level parser instance (importable for tests)
+_PARSER = _build_parser()
+
+# ---------------------------------------------------------------------------
+# Usage string
 # ---------------------------------------------------------------------------
 
 USAGE = """\
@@ -776,12 +600,14 @@ Subcommands:
   rm                    Delete the last captured file
   summary [keyword]     Table of all captures, or search across them.
                         Named patterns: passwords, hashes, users, emails,
-                        ports, vulns, urls  — or any literal keyword.
-  ls [subdir]           Browse captures interactively (fzf) or list them
+                        ports, vulns, urls  — or any literal keyword / regex.
+  ls [subdir]           Browse captures interactively (fzf) or list them.
+                        Accepts any subdir name, not just built-in ones.
   update                Update nocap to the latest version via pipx
 
 Environment:
   NOCAP_AUTO=1          Enable --auto routing by default (no flag needed)
+  NOCAP_WORKSPACE=path  Override the base workspace directory (default: /workspace)
 
 Subdirs:
   recon, loot, exploitation, screenshots, notes
@@ -795,12 +621,13 @@ Examples:
   cap last
   cap ls
   cap ls recon
+  cap ls pivoting
   cat $(cap last)
 
 Routing (priority order):
-  1. $TARGET env var   → /workspace/$TARGET/<subdir>/
-  2. tmux pentest_*    → /workspace/<target>/<subdir>/
-  3. Fallback          → ./<subdir>/  (current working directory)
+  1. $TARGET env var         → $NOCAP_WORKSPACE/$TARGET/<subdir>/
+  2. tmux pentest_* session  → $NOCAP_WORKSPACE/<target>/<subdir>/
+  3. Fallback                → ./<subdir>/  (current working directory)
 
 Auto-routing (--auto / -a):
   Infers subdir from tool name. Explicit subdir always takes precedence.
@@ -824,6 +651,9 @@ Auto-routing (--auto / -a):
               GetUserSPNs.py, ntlmrelayx.py, xsstrike, …
 """
 
+# ---------------------------------------------------------------------------
+# CLI entry point
+# ---------------------------------------------------------------------------
 
 def main(argv: list[str] | None = None) -> None:
     try:
@@ -833,88 +663,57 @@ def main(argv: list[str] | None = None) -> None:
 
 
 def _main(argv: list[str] | None = None) -> None:
-    args = list(argv) if argv is not None else sys.argv[1:]
+    raw = list(argv) if argv is not None else sys.argv[1:]
 
-    if not args or args[0] in ("-h", "--help"):
+    if not raw:
         print(USAGE)
         sys.exit(0)
 
-    if args[0] in ("-V", "-v", "--version"):
-        from nocap import __version__
-        print(f"nocap {__version__}")
+    # Fast-path: dispatch known subcommands before flag parsing so that
+    # subcommand names are never mistaken for a tool to run.
+    if raw[0] in _DISPATCH:
+        _DISPATCH[raw[0]](raw[1:])
+        return
+
+    # Parse nocap-specific flags.
+    # nargs=REMAINDER means that once the parser encounters the first
+    # positional argument (the tool name), everything that follows —
+    # including option-like strings — is captured verbatim in ns.command.
+    # This ensures that flags intended for the child process are never
+    # accidentally consumed by nocap's own parser.
+    try:
+        ns = _PARSER.parse_args(raw)
+    except SystemExit:
+        print(USAGE, file=sys.stderr)
+        sys.exit(2)
+
+    if ns.help:
+        print(USAGE)
         sys.exit(0)
 
-    # Subcommands
-    if args[0] == "last":
-        _cmd_last()
-        return
+    if ns.version:
+        print(f"nocap {_get_version()}")
+        sys.exit(0)
 
-    if args[0] == "cat":
-        _cmd_cat()
-        return
-
-    if args[0] == "tail":
-        _cmd_tail()
-        return
-
-    if args[0] == "open":
-        _cmd_open()
-        return
-
-    if args[0] == "rm":
-        _cmd_rm()
-        return
-
-    if args[0] == "summary":
-        _cmd_summary(args[1] if len(args) > 1 else "")
-        return
-
-    if args[0] == "update":
-        _cmd_update()
-        return
-
-    if args[0] == "ls":
-        subdir_arg = args[1] if len(args) > 1 and args[1] in SUBDIRS else ""
-        _cmd_ls(subdir_arg)
-        return
-
-    # Parse nocap-specific flags (must come before subdir / command)
-    note = ""
+    # Resolve NOCAP_AUTO env var; explicit -a flag takes priority
     _env_auto = os.environ.get("NOCAP_AUTO", "").strip().lower()
-    auto_route = bool(_env_auto) and _env_auto not in ("0", "false", "no")  # honour env default
-    dry_run = False
-    subdir = ""
+    auto = ns.auto or (bool(_env_auto) and _env_auto not in ("0", "false", "no"))
 
-    while args:
-        if args[0] in ("-n", "--note") and len(args) > 1:
-            note = args[1]
-            args = args[2:]
-        elif args[0] in ("-a", "--auto"):
-            auto_route = True
-            args = args[1:]
-        elif args[0] in ("-D", "--dry-run"):
-            dry_run = True
-            args = args[1:]
-        elif args[0] in ("-s", "--subdir") and len(args) > 1:
-            subdir = args[1]
-            args = args[2:]
-        else:
-            break
+    cmd: list[str] = ns.command
+    subdir: str = ns.subdir
 
     # Optional predefined engagement subdir as first positional arg
-    if not subdir and args and args[0] in SUBDIRS:
-        subdir = args[0]
-        args = args[1:]
+    if not subdir and cmd and cmd[0] in SUBDIRS:
+        subdir = cmd[0]
+        cmd = cmd[1:]
 
-    if not args:
+    if not cmd:
         print("nocap: error: no command specified\n", file=sys.stderr)
-        print(USAGE)
+        print(USAGE, file=sys.stderr)
         sys.exit(1)
 
-    cmd = args
-
     # Auto tool→subdir routing (only when --auto is set and no explicit subdir)
-    if auto_route and not subdir:
+    if auto and not subdir:
         tool = Path(cmd[0]).name
         subdir = TOOL_SUBDIRS.get(tool, "")
 
@@ -931,15 +730,17 @@ def _main(argv: list[str] | None = None) -> None:
 
     outdir.mkdir(parents=True, exist_ok=True)
 
-    # Build filename and resolve collisions
-    stem = _build_filename(cmd, note=note)
-    outfile = _resolve_outfile(outdir, stem)
+    stem = _build_filename(cmd, note=ns.note)
 
-    if dry_run:
+    if ns.dry_run:
+        outfile = _compute_outfile(outdir, stem)
         print(f"\033[90m[dry] → {outfile}\033[0m")
         sys.exit(0)
 
-    # Write file header
+    # Atomically claim the output file (eliminates the TOCTOU race)
+    outfile = _claim_outfile(outdir, stem)
+
+    # Write file header (overwrites the empty placeholder created above)
     with outfile.open("w") as f:
         f.write(f"Command: {' '.join(cmd)}\n")
         f.write(f"Date:    {datetime.now().astimezone().strftime('%a %b %d %H:%M:%S %Z %Y')}\n")
