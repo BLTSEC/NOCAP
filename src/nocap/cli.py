@@ -115,8 +115,8 @@ def _get_base_dir() -> Path | None:
             capture_output=True, text=True, timeout=2,
         )
         sess = result.stdout.strip()
-        if sess.startswith("pentest_"):
-            tgt = sess.removeprefix("pentest_").replace("_", ".")
+        if sess.startswith("op_"):
+            tgt = sess.removeprefix("op_").replace("_", ".")
             return workspace / tgt
     except Exception:
         pass
@@ -634,7 +634,7 @@ Examples:
 
 Routing (priority order):
   1. $TARGET env var         → $NOCAP_WORKSPACE/$TARGET/<subdir>/
-  2. tmux pentest_* session  → $NOCAP_WORKSPACE/<target>/<subdir>/
+  2. tmux op_* session       → $NOCAP_WORKSPACE/<target>/<subdir>/
   3. Fallback                → ./<subdir>/  (current working directory)
 
 Auto-routing (--auto / -a):

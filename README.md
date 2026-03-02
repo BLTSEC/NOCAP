@@ -14,7 +14,7 @@ completion status with elapsed time, and interactive capture browsing.
 No more `| tee recon/nmap-sCV.txt` one-liners.
 
 ```bash
-# $TARGET set or pentest_* tmux session active → routes to /workspace/<target>/
+# $TARGET set or op_* tmux session active → routes to /workspace/<target>/
 export TARGET=10.10.10.5
 cap nmap -sCV 10.10.10.5
 # → /workspace/10.10.10.5/nmap_sCV.txt
@@ -147,7 +147,7 @@ NOCAP resolves your engagement directory automatically — no configuration need
 | Priority | Condition | Output location |
 |---|---|---|
 | 1 | `$TARGET` env var is set | `$NOCAP_WORKSPACE/$TARGET/<subdir>/` |
-| 2 | Active tmux session named `pentest_*` | `$NOCAP_WORKSPACE/<target>/<subdir>/` |
+| 2 | Active tmux session named `op_*` | `$NOCAP_WORKSPACE/<target>/<subdir>/` |
 | 3 | Fallback | `./<subdir>/` (current directory) |
 
 The workspace root defaults to `/workspace` and can be overridden:
