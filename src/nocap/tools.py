@@ -131,7 +131,9 @@ TOOL_SUBDIRS: dict[str, str] = {
     # recon: Kerberos, AD & BloodHound collection
     "kerbrute": "recon",
     "netexec": "recon",
+    "nxc": "recon",
     "crackmapexec": "recon",
+    "cme": "recon",
     "sprayhound": "recon",
     "smartbrute": "recon",
     "ldapdomaindump": "recon",
