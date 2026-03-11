@@ -45,7 +45,7 @@ pipx install ./nocap
 
 ```
 cap [options] [subdir] <command> [args...]
-cap last | cat | tail | open | rm | summary
+cap last | cat | tail | open | rm | summary | render
 cap ls [subdir]
 cap update
 ```
@@ -64,11 +64,12 @@ cap update
 | Command | Description |
 |---|---|
 | `cap last` | Print the path of the last captured file |
-| `cap cat` | Dump last capture to stdout (`bat` or `cat`) |
+| `cap cat` | Dump last capture to stdout with clean rendered output |
 | `cap tail` | Follow last capture from the start — useful while a scan runs in another pane |
-| `cap open` | Open last capture in `$EDITOR`, then `bat`, `less -R`, or `cat` |
+| `cap open` | Open last capture in `$EDITOR`, or rendered through `less` |
 | `cap rm` | Delete the last captured file |
 | `cap summary [keyword]` | Compact table of all captures, or search across them by keyword |
+| `cap render [file]` | Render a capture (or the last one) through the VT100 cleaner — strips ANSI, progress bars, cursor noise |
 | `cap ls [subdir]` | Browse captures interactively (fzf) or list them. Accepts any subdir name. |
 | `cap update` | Update nocap to the latest version via pipx |
 
@@ -236,17 +237,21 @@ All last-file subcommands operate on the most recently captured file.
 
 ```bash
 cap last                    # print the path
-cap cat                     # dump to stdout (bat or cat)
+cap cat                     # dump to stdout — rendered clean (no ANSI/progress noise)
 cap tail                    # follow from the start — watch a running scan
-cap open                    # open in $EDITOR / bat / less -R / cat
+cap open                    # open in $EDITOR, or rendered through less
 cap rm                      # delete the capture
+cap render                  # render last capture through VT100 cleaner
+cap render /path/to/file    # render any capture file
 
 # Compose last with other tools
 grep -i password $(cap last)
 cp $(cap last) ~/report/evidence.txt
 ```
 
-`cap open` picks the best available viewer in order: `$EDITOR` → `bat` → `less -R` → `cat`.
+`cap cat` and `cap open` automatically render captures through the built-in VT100 cleaner,
+stripping ANSI escape codes, progress bar redraws, and cursor noise to produce clean readable text.
+`cap open` picks the best available viewer in order: `$EDITOR` (raw file) → `less` (rendered).
 
 ---
 
@@ -297,9 +302,9 @@ recon/nmap_sCV.txt
 
 ## `cap ls`
 
-Lists all captures for the current engagement. Uses **fzf** with file preview if
-available (falls back to a plain listing if not). Preview uses **bat** for syntax
-highlighting when installed, otherwise **cat**.
+Lists all captures for the current engagement. Uses **fzf** with rendered preview if
+available, falls back to a compact table (relative paths, human-readable sizes, line
+counts). Preview renders captures through the VT100 cleaner for readable output.
 
 The subdir argument accepts any directory name — not just the built-in ones:
 
@@ -371,6 +376,10 @@ Starting Nmap 7.94 ...
 NOCAP runs commands under a PTY so tools behave exactly as they would in a
 normal terminal — colours, progress bars, and interactive prompts all work.
 
+Shell functions and aliases (defined in `.zshrc`, `.bashrc`, etc.) are supported
+automatically — if the command isn't found as a binary on `$PATH`, NOCAP wraps
+the invocation in `$SHELL -ic "..."` so your shell profile is sourced.
+
 ---
 
 ## Completion Status
@@ -394,9 +403,8 @@ Optional enhancements if present on your PATH:
 
 | Tool | Used by |
 |---|---|
-| **fzf** | `cap ls` — interactive file browser with preview |
-| **bat** | `cap cat`, `cap open`, `cap ls` preview — syntax-aware output |
-| **less** | `cap open` — fallback pager if bat is not installed |
+| **fzf** | `cap ls` — interactive file browser with rendered preview |
+| **less** | `cap open` — pager for rendered output |
 
 ---
 

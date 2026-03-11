@@ -41,6 +41,11 @@ _NUM_RE = re.compile(r"^\d+(,\d+)*$")
 # Strip ANSI escape codes for clean text matching in summary search
 _ANSI_RE = re.compile(r"\x1b\[[?!0-9;]*[a-zA-Z]")
 
+# VT100 rendering helpers (for cleaning raw PTY captures)
+_RE_OSC = re.compile(r"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)")
+_RE_CSI = re.compile(r"\x1b\[([0-9;?]*)([A-Za-z])")
+_RE_ESC_MISC = re.compile(r"\x1b[^[\]]")
+
 # Named smart patterns for `cap summary <keyword>`
 _SUMMARY_PATTERNS: dict[str, re.Pattern[str]] = {
     "passwords": re.compile(
@@ -291,6 +296,12 @@ def _run_pty(cmd: list[str], outfile: Path) -> int:
     master_fd, slave_fd = pty.openpty()
     _set_winsize(slave_fd, rows, cols)
 
+    # If the command isn't a binary on PATH, wrap it in the user's shell
+    # so that shell functions and aliases (e.g. from .zshrc) are available.
+    if not shutil.which(cmd[0]):
+        shell = os.environ.get("SHELL", "/bin/sh")
+        cmd = [shell, "-ic", " ".join(shlex.quote(c) for c in cmd)]
+
     pid = os.fork()
 
     if pid == 0:
@@ -347,23 +358,181 @@ def _run_pty(cmd: list[str], outfile: Path) -> int:
     return exit_code
 
 # ---------------------------------------------------------------------------
+# VT100 renderer — clean raw PTY captures into readable plain text
+# ---------------------------------------------------------------------------
+
+def _vt100_render(data: str) -> str:
+    """Emulate a VT100 line buffer to resolve \\r, cursor movement, and erase
+    sequences, then strip all remaining ANSI codes.  Returns clean plain text."""
+    data = _RE_OSC.sub("", data)
+    data = _RE_ESC_MISC.sub("", data)
+
+    lines: list[str] = []
+    buf: list[str] = []
+    pos = 0
+    i = 0
+    n = len(data)
+
+    while i < n:
+        ch = data[i]
+
+        if ch == "\n":
+            lines.append("".join(buf).rstrip())
+            buf, pos = [], 0
+            i += 1
+            continue
+
+        if ch == "\r":
+            pos = 0
+            i += 1
+            continue
+
+        if ch == "\x08":
+            if pos > 0:
+                pos -= 1
+            i += 1
+            continue
+
+        if ch == "\x1b" and i + 1 < n and data[i + 1] == "[":
+            m = _RE_CSI.match(data, i)
+            if m:
+                params_str, final = m.group(1), m.group(2)
+                clean = params_str.lstrip("?")
+                try:
+                    params = [int(x) if x else 0 for x in clean.split(";")]
+                except ValueError:
+                    params = [0]
+
+                if final == "D":
+                    pos = max(0, pos - (params[0] or 1))
+                elif final == "C":
+                    pos += params[0] or 1
+                elif final == "G":
+                    pos = max(0, (params[0] or 1) - 1)
+                elif final == "K":
+                    p = params[0]
+                    if p == 0:
+                        buf = buf[:pos]
+                    elif p == 1:
+                        buf = [" "] * pos + buf[pos:]
+                    elif p == 2:
+                        buf, pos = [], 0
+                elif final == "J":
+                    buf = buf[:pos]
+
+                i = m.end()
+                continue
+            else:
+                i += 1
+                continue
+
+        if ch == "\x1b":
+            i += 1
+            continue
+
+        if ord(ch) < 0x20 or ch == "\x7f":
+            i += 1
+            continue
+
+        # printable character
+        if pos < len(buf):
+            buf[pos] = ch
+        else:
+            if pos > len(buf):
+                buf.extend([" "] * (pos - len(buf)))
+            buf.append(ch)
+        pos += 1
+        i += 1
+
+    if buf:
+        lines.append("".join(buf).rstrip())
+
+    return "\n".join(lines)
+
+
+def _clean_rendered(text: str) -> str:
+    """Post-process rendered output: collapse progress-bar spam, repeated
+    blocks, and excessive blank lines."""
+    lines = text.split("\n")
+
+    # ── Strip animation artifacts (runs of ≥6 near-empty lines) ───────────
+    cleaned: list[str] = []
+    i = 0
+    while i < len(lines):
+        nws = sum(1 for c in lines[i] if not c.isspace())
+        if nws <= 3:
+            j = i
+            while j < len(lines) and sum(1 for c in lines[j] if not c.isspace()) <= 3:
+                j += 1
+            if j - i >= 6:
+                i = j
+                continue
+            cleaned.extend(lines[i:j])
+            i = j
+        else:
+            cleaned.append(lines[i])
+            i += 1
+    lines = cleaned
+
+    # ── Collapse 3+ consecutive identical lines → one + [×N] ─────────────
+    deduped: list[str] = []
+    i = 0
+    while i < len(lines):
+        j = i + 1
+        while j < len(lines) and lines[j] == lines[i]:
+            j += 1
+        deduped.append(lines[i])
+        count = j - i
+        if count >= 3:
+            deduped.append(f"  [\u00d7{count}]")
+        elif count == 2:
+            deduped.append(lines[i])
+        i = j
+    lines = deduped
+
+    # ── Collapse 3+ consecutive blank lines → 1 ──────────────────────────
+    result: list[str] = []
+    i = 0
+    while i < len(lines):
+        if lines[i].strip() == "":
+            j = i
+            while j < len(lines) and lines[j].strip() == "":
+                j += 1
+            if j - i >= 3:
+                result.append("")
+            else:
+                result.extend(lines[i:j])
+            i = j
+        else:
+            result.append(lines[i])
+            i += 1
+
+    return "\n".join(result)
+
+
+def _render_capture(path: Path) -> str:
+    """Read a capture file and return clean plain text."""
+    raw = path.read_bytes().decode("utf-8", errors="replace")
+    return _clean_rendered(_vt100_render(raw))
+
+
+# ---------------------------------------------------------------------------
 # Shared viewer helper
 # ---------------------------------------------------------------------------
 
 def _view_file(path: Path, *, paging: bool = False) -> None:
-    """Display *path* using the best available viewer."""
+    """Display *path* rendered through the VT100 cleaner, with optional paging."""
+    rendered = _render_capture(path)
     if paging:
-        if shutil.which("bat"):
-            subprocess.run(["bat", "--paging=always", "--color=always", str(path)])
-        elif shutil.which("less"):
-            subprocess.run(["less", "-R", str(path)])
+        if shutil.which("less"):
+            proc = subprocess.Popen(["less", "-R"], stdin=subprocess.PIPE)
+            proc.communicate(input=rendered.encode())
         else:
-            subprocess.run(["cat", str(path)])
+            sys.stdout.write(rendered)
     else:
-        if shutil.which("bat"):
-            subprocess.run(["bat", "--paging=never", "--color=always", "--style=plain", str(path)])
-        else:
-            subprocess.run(["cat", str(path)])
+        sys.stdout.write(rendered)
+        if not rendered.endswith("\n"):
+            sys.stdout.write("\n")
 
 # ---------------------------------------------------------------------------
 # Last-file helpers
@@ -508,6 +677,19 @@ def _cmd_update(_: list[str] | None = None) -> None:
     ]).returncode)
 
 
+def _cmd_render(args: list[str] | None = None) -> None:
+    """Render a capture file (or the last capture) through the VT100 cleaner."""
+    if args:
+        path = Path(args[0])
+        if not path.exists():
+            print(f"nocap: file not found: {path}", file=sys.stderr)
+            sys.exit(1)
+    else:
+        path = _last_path()
+    sys.stdout.write(_render_capture(path))
+    sys.stdout.flush()
+
+
 def _cmd_ls(args: list[str] | None = None) -> None:
     """List captures for the current engagement, optionally scoped to a subdir."""
     subdir = (args[0] if args else "")
@@ -527,20 +709,41 @@ def _cmd_ls(args: list[str] | None = None) -> None:
         print(f"nocap: no captures in {search_dir}", file=sys.stderr)
         sys.exit(1)
 
-    file_list = "\n".join(str(f) for f in files)
+    # Build relative paths and metadata for display
+    rows: list[tuple[str, int, str, str, Path]] = []  # (mtime, lines, size_str, rel, abs)
+    for f in files:
+        stat = f.stat()
+        mtime = datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M")
+        size = stat.st_size
+        size_str = f"{size / 1024:.1f}K" if size >= 1024 else f"{size}B"
+        lines = _count_lines(f)
+        try:
+            rel = str(f.relative_to(base))
+        except ValueError:
+            rel = str(f)
+        rows.append((mtime, lines, size_str, rel, f))
 
     if shutil.which("fzf"):
-        preview_cmd = "bat --color=always {} 2>/dev/null || cat {}"
+        rel_list = "\n".join(rel for _, _, _, rel, _ in rows)
+        # Render capture through VT100 cleaner for preview
+        preview_cmd = (
+            f"cap render {shlex.quote(str(base))}/{{}}"
+        )
         subprocess.run(
-            ["fzf", "--preview", preview_cmd, "--preview-window=right:70%:wrap", "--ansi"],
-            input=file_list,
+            ["fzf",
+             "--header", f"  {base}",
+             "--preview", preview_cmd,
+             "--preview-window=right:70%:wrap",
+             "--ansi"],
+            input=rel_list,
             text=True,
         )
     else:
-        for f in files:
-            size = f.stat().st_size
-            mtime = datetime.fromtimestamp(f.stat().st_mtime).strftime("%Y-%m-%d %H:%M")
-            print(f"{mtime}  {size:>8}  {f}")
+        line_w = max(len(str(r[1])) for r in rows)
+        size_w = max(len(r[2]) for r in rows)
+        print(f"\033[90m  {base}\033[0m")
+        for mtime, lines, size_str, rel, _ in rows:
+            print(f"\033[90m{mtime}\033[0m  {lines:{line_w}} lines  {size_str:{size_w}}  {rel}")
 
 # ---------------------------------------------------------------------------
 # Subcommand dispatch table
@@ -553,6 +756,7 @@ _DISPATCH: dict[str, Callable[[list[str]], None]] = {
     "open":    _cmd_open,
     "rm":      _cmd_rm,
     "summary": _cmd_summary,
+    "render":  _cmd_render,
     "update":  _cmd_update,
     "ls":      _cmd_ls,
 }
