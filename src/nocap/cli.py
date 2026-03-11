@@ -546,7 +546,11 @@ def _last_path() -> Path:
     if not _LAST_FILE.exists():
         print("nocap: no captures yet", file=sys.stderr)
         sys.exit(1)
-    return Path(_LAST_FILE.read_text().strip())
+    path = Path(_LAST_FILE.read_text().strip())
+    if not path.exists():
+        print(f"nocap: last capture no longer exists: {path}", file=sys.stderr)
+        sys.exit(1)
+    return path
 
 # ---------------------------------------------------------------------------
 # Subcommands
@@ -681,11 +685,11 @@ def _cmd_render(args: list[str] | None = None) -> None:
     """Render a capture file (or the last capture) through the VT100 cleaner."""
     if args:
         path = Path(args[0])
-        if not path.exists():
-            print(f"nocap: file not found: {path}", file=sys.stderr)
-            sys.exit(1)
     else:
         path = _last_path()
+    if not path.exists():
+        print(f"nocap: file not found: {path}", file=sys.stderr)
+        sys.exit(1)
     sys.stdout.write(_render_capture(path))
     sys.stdout.flush()
 
