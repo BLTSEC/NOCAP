@@ -142,6 +142,17 @@ def _last_command_from_history() -> str | None:
     return None
 
 
+_PROMPT_LINE_RE = re.compile(
+    r"^[╭╰┌└├┬┼]"            # box-drawing start (p10k, starship, oh-my-posh)
+    r"|[❯➜›»\$#%>]\s*$"      # common prompt-end suffixes
+)
+
+
+def _is_prompt_line(line: str) -> bool:
+    """Return True if *line* looks like shell prompt decoration."""
+    return bool(_PROMPT_LINE_RE.search(line.strip()))
+
+
 def _extract_output(scrollback: str, command: str) -> str:
     """Extract the output of *command* from tmux scrollback text.
 
@@ -156,6 +167,12 @@ def _extract_output(scrollback: str, command: str) -> str:
         lines.pop()
     # Remove trailing prompt / `cap grab` line(s)
     while lines and ("cap grab" in lines[-1]):
+        lines.pop()
+    while lines and lines[-1].strip() == "":
+        lines.pop()
+    # Strip trailing prompt decoration lines (multi-line prompts like p10k,
+    # starship, oh-my-posh use box-drawing chars; also catch common suffixes)
+    while lines and _is_prompt_line(lines[-1]):
         lines.pop()
     while lines and lines[-1].strip() == "":
         lines.pop()

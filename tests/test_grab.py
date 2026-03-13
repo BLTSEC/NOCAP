@@ -100,6 +100,39 @@ class TestExtractOutput:
         result = _extract_output(scrollback, "id")
         assert "uid=0(root)" in result
 
+    def test_p10k_prompt_stripped(self):
+        """Multi-line prompts (p10k, starship) should be stripped from output."""
+        scrollback = (
+            "╭─    /tmp ···· ✔  10:27:27 \n"
+            "╰─ nmap -p 80 scanme.nmap.org\n"
+            "Starting Nmap 7.98\n"
+            "PORT   STATE SERVICE\n"
+            "80/tcp open  http\n"
+            "Nmap done: 1 IP address\n"
+            "\n"
+            "╭─    /tmp ···· ✔  10:27:31 \n"
+            "╰─ cap grab\n"
+        )
+        result = _extract_output(scrollback, "nmap -p 80 scanme.nmap.org")
+        assert "Starting Nmap" in result
+        assert "80/tcp open" in result
+        assert "Nmap done" in result
+        assert "╭─" not in result
+        assert "╰─" not in result
+        assert "cap grab" not in result
+
+    def test_starship_prompt_stripped(self):
+        scrollback = (
+            "❯ ls -la\n"
+            "total 8\n"
+            "-rw-r--r-- 1 user user 0 file.txt\n"
+            "❯ cap grab\n"
+        )
+        result = _extract_output(scrollback, "ls -la")
+        assert "total 8" in result
+        assert "file.txt" in result
+        assert "❯" not in result
+
     def test_no_scrollback(self):
         result = _extract_output("", "ls")
         assert result == ""
