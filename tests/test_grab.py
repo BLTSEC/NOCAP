@@ -133,6 +133,43 @@ class TestExtractOutput:
         assert "file.txt" in result
         assert "❯" not in result
 
+    def test_earlier_command_stops_at_next_prompt(self):
+        """When grabbing a non-last command, output should stop at the next prompt."""
+        scrollback = (
+            "╭─    /tmp ···· ✔  10:27:27 \n"
+            "╰─ nmap -p 80 scanme.nmap.org\n"
+            "Starting Nmap 7.98\n"
+            "80/tcp open  http\n"
+            "Nmap done: 1 IP address\n"
+            "\n"
+            "╭─    /tmp ···· ✔  10:27:31 \n"
+            "╰─ nmap -p 53 scanme.nmap.org\n"
+            "Starting Nmap 7.98\n"
+            "53/tcp open  domain\n"
+            "Nmap done: 1 IP address\n"
+            "\n"
+            "╭─    /tmp ···· ✔  10:27:35 \n"
+            "╰─ cap grab nmap -p 80\n"
+        )
+        result = _extract_output(scrollback, "nmap -p 80")
+        assert "80/tcp open  http" in result
+        assert "53/tcp" not in result
+        assert "cap grab" not in result
+
+    def test_earlier_command_basic_prompt(self):
+        """Same test with basic user@host:~$ prompts."""
+        scrollback = (
+            "user@box:~$ nmap -p 80 target\n"
+            "80/tcp open  http\n"
+            "user@box:~$ whoami\n"
+            "root\n"
+            "user@box:~$ cap grab nmap -p 80\n"
+        )
+        result = _extract_output(scrollback, "nmap -p 80")
+        assert "80/tcp open" in result
+        assert "whoami" not in result
+        assert "root" not in result
+
     def test_no_scrollback(self):
         result = _extract_output("", "ls")
         assert result == ""

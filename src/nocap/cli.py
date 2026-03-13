@@ -147,10 +147,29 @@ _PROMPT_LINE_RE = re.compile(
     r"|[❯➜›»\$#%>]\s*$"      # common prompt-end suffixes
 )
 
+# Detects basic single-line prompts: user@host:path$ , root#, etc.
+_BASIC_PROMPT_RE = re.compile(r"[@:~].*[$#%>]\s")
+
 
 def _is_prompt_line(line: str) -> bool:
     """Return True if *line* looks like shell prompt decoration."""
     return bool(_PROMPT_LINE_RE.search(line.strip()))
+
+
+def _starts_new_prompt(line: str) -> bool:
+    """Return True if *line* looks like the start of a new command prompt.
+
+    Catches multi-line prompts (box-drawing chars), common prompt suffixes,
+    and basic ``user@host:path$`` patterns.
+    """
+    stripped = line.strip()
+    if not stripped:
+        return False
+    if _is_prompt_line(stripped):
+        return True
+    if _BASIC_PROMPT_RE.search(stripped):
+        return True
+    return False
 
 
 def _extract_output(scrollback: str, command: str) -> str:
@@ -201,7 +220,13 @@ def _extract_output(scrollback: str, command: str) -> str:
                 break
 
     if cmd_idx is not None:
-        output_lines = lines[cmd_idx + 1:]
+        # Find where the output ends — the next prompt after the command
+        end_idx = len(lines)
+        for i in range(cmd_idx + 1, len(lines)):
+            if _starts_new_prompt(lines[i]):
+                end_idx = i
+                break
+        output_lines = lines[cmd_idx + 1 : end_idx]
     else:
         # Fallback: couldn't find the command — grab everything after the
         # last prompt-like line (line ending with $ or # or >)
