@@ -82,6 +82,133 @@ _SUMMARY_PATTERNS: dict[str, re.Pattern[str]] = {
 _LAST_FILE = Path.home() / ".cache" / "nocap" / "last"
 
 # ---------------------------------------------------------------------------
+# tmux / scrollback helpers (for `cap grab`)
+# ---------------------------------------------------------------------------
+
+def _in_tmux() -> bool:
+    """Return True if running inside a tmux session."""
+    return bool(os.environ.get("TMUX"))
+
+
+def _tmux_scrollback() -> str:
+    """Capture the full tmux pane scrollback as a string."""
+    result = subprocess.run(
+        ["tmux", "capture-pane", "-p", "-S", "-", "-E", "-"],
+        capture_output=True, text=True, timeout=5,
+    )
+    return result.stdout
+
+
+def _last_command_from_history() -> str | None:
+    """Read the last command from the user's shell history that isn't `cap grab`.
+
+    Supports zsh extended history format (`: timestamp:0;command`) and
+    bash plain-line format.  Returns None if the history can't be read.
+    """
+    shell = Path(os.environ.get("SHELL", "/bin/sh")).name
+
+    if shell == "zsh":
+        hist_path = Path(os.environ.get("HISTFILE", Path.home() / ".zsh_history"))
+    else:
+        hist_path = Path(os.environ.get("HISTFILE", Path.home() / ".bash_history"))
+
+    if not hist_path.is_file():
+        return None
+
+    try:
+        raw = hist_path.read_bytes()
+        # zsh uses a mix of UTF-8 and meta-encoded bytes; best-effort decode
+        text = raw.decode("utf-8", errors="replace")
+    except Exception:
+        return None
+
+    lines = text.splitlines()
+
+    # Walk backwards to find the last non-`cap grab` command
+    for line in reversed(lines):
+        # zsh extended format: `: <timestamp>:0;<command>`
+        if line.startswith(": ") and ";" in line:
+            cmd = line.split(";", 1)[1].strip()
+        else:
+            cmd = line.strip()
+
+        if not cmd:
+            continue
+        # Skip the `cap grab` invocation itself (with any flags/args)
+        if cmd == "cap grab" or cmd.startswith("cap grab "):
+            continue
+        return cmd
+
+    return None
+
+
+def _extract_output(scrollback: str, command: str) -> str:
+    """Extract the output of *command* from tmux scrollback text.
+
+    Searches backward for a line containing the command string, then returns
+    everything between that line (exclusive) and the end, trimming trailing
+    blanks and the ``cap grab`` invocation line.
+    """
+    lines = scrollback.split("\n")
+
+    # Strip trailing empty lines and the `cap grab` invocation
+    while lines and lines[-1].strip() == "":
+        lines.pop()
+    # Remove trailing prompt / `cap grab` line(s)
+    while lines and ("cap grab" in lines[-1]):
+        lines.pop()
+    while lines and lines[-1].strip() == "":
+        lines.pop()
+
+    # Search backward for the command line.  Prefer lines that look like a
+    # shell prompt (contain $ # % >) followed by the command, so we don't
+    # accidentally match an output line that happens to contain the string.
+    _PROMPT_CHARS = {"$", "#", "%", ">"}
+    cmd_idx = None
+    for i in range(len(lines) - 1, -1, -1):
+        line = lines[i]
+        if command not in line:
+            continue
+        # Check if this looks like a prompt line: a prompt char appears
+        # before the command string in the line
+        pos = line.find(command)
+        prefix = line[:pos]
+        if any(ch in prefix for ch in _PROMPT_CHARS):
+            cmd_idx = i
+            break
+    # If no prompt-style match found, fall back to plain substring match
+    if cmd_idx is None:
+        for i in range(len(lines) - 1, -1, -1):
+            if command in lines[i]:
+                cmd_idx = i
+                break
+
+    if cmd_idx is not None:
+        output_lines = lines[cmd_idx + 1:]
+    else:
+        # Fallback: couldn't find the command — grab everything after the
+        # last prompt-like line (line ending with $ or # or >)
+        prompt_idx = None
+        for i in range(len(lines) - 1, -1, -1):
+            stripped = lines[i].rstrip()
+            if stripped and stripped[-1] in ("$", "#", ">"):
+                prompt_idx = i
+                break
+        if prompt_idx is not None:
+            output_lines = lines[prompt_idx + 1:]
+        else:
+            # Last resort: return everything
+            output_lines = lines
+
+    # Strip leading/trailing blank lines from extracted output
+    while output_lines and output_lines[0].strip() == "":
+        output_lines.pop(0)
+    while output_lines and output_lines[-1].strip() == "":
+        output_lines.pop()
+
+    return "\n".join(output_lines)
+
+# ---------------------------------------------------------------------------
 # Version
 # ---------------------------------------------------------------------------
 
@@ -694,6 +821,88 @@ def _cmd_render(args: list[str] | None = None) -> None:
     sys.stdout.flush()
 
 
+def _cmd_grab(args: list[str] | None = None) -> None:
+    """Retroactively capture the last command's output from tmux scrollback."""
+    if not _in_tmux():
+        print("nocap: cap grab requires tmux (need scrollback buffer)", file=sys.stderr)
+        print("  tip: use `cap <command>` next time to capture live", file=sys.stderr)
+        sys.exit(1)
+
+    # Parse nocap flags from args (-n, -s, -a) — reuse the main parser
+    # but only extract our flags; remaining positional args = explicit command
+    grab_args = list(args) if args else []
+    try:
+        ns = _PARSER.parse_args(grab_args)
+    except SystemExit:
+        print("nocap: invalid flags for cap grab", file=sys.stderr)
+        sys.exit(2)
+
+    explicit_cmd = ns.command  # remaining positional args after flags
+    note = ns.note
+    subdir = ns.subdir
+
+    _env_auto = os.environ.get("NOCAP_AUTO", "").strip().lower()
+    auto = ns.auto or (bool(_env_auto) and _env_auto not in ("0", "false", "no"))
+
+    # Determine the command string
+    if explicit_cmd:
+        command_str = " ".join(explicit_cmd)
+        cmd_list = explicit_cmd
+    else:
+        command_str = _last_command_from_history()
+        if not command_str:
+            print("nocap: couldn't detect last command from shell history", file=sys.stderr)
+            print("  usage: cap grab [options] <command...>", file=sys.stderr)
+            sys.exit(1)
+        cmd_list = shlex.split(command_str)
+
+    # Capture tmux scrollback
+    scrollback = _tmux_scrollback()
+
+    # Extract the output
+    output = _extract_output(scrollback, command_str)
+    if not output:
+        print(f"\033[33mnocap: warning: no output found for: {command_str}\033[0m", file=sys.stderr)
+
+    # Auto-route subdir if requested
+    if auto and not subdir and cmd_list:
+        tool = Path(cmd_list[0]).name
+        subdir = TOOL_SUBDIRS.get(tool, "")
+
+    # Resolve output directory
+    base_dir = _get_base_dir()
+    if base_dir and subdir:
+        outdir = base_dir / subdir
+    elif base_dir:
+        outdir = base_dir
+    elif subdir:
+        outdir = Path.cwd() / subdir
+    else:
+        outdir = Path.cwd()
+
+    outdir.mkdir(parents=True, exist_ok=True)
+
+    # Build filename and claim output file
+    stem = _build_filename(cmd_list, note=note)
+    outfile = _claim_outfile(outdir, stem)
+
+    # Write header + output (same format as live captures)
+    with outfile.open("w") as f:
+        f.write(f"Command: {command_str}\n")
+        f.write(f"Date:    {datetime.now().astimezone().strftime('%a %b %d %H:%M:%S %Z %Y')}\n")
+        f.write("---\n")
+        if output:
+            f.write(output)
+            if not output.endswith("\n"):
+                f.write("\n")
+
+    # Track as last capture
+    _LAST_FILE.parent.mkdir(parents=True, exist_ok=True)
+    _LAST_FILE.write_text(str(outfile))
+
+    print(f"\033[90m[grab] → {outfile}\033[0m", file=sys.stderr)
+
+
 def _cmd_ls(args: list[str] | None = None) -> None:
     """List captures for the current engagement, optionally scoped to a subdir."""
     subdir = (args[0] if args else "")
@@ -761,6 +970,7 @@ _DISPATCH: dict[str, Callable[[list[str]], None]] = {
     "rm":      _cmd_rm,
     "summary": _cmd_summary,
     "render":  _cmd_render,
+    "grab":    _cmd_grab,
     "update":  _cmd_update,
     "ls":      _cmd_ls,
 }
@@ -797,6 +1007,7 @@ NOCAP — Capture tool output. No cap.
 
 Usage:
   cap [options] [subdir] <command> [args...]
+  cap grab [options] [command...]
   cap last | cat | tail | open | rm | summary
   cap ls [subdir]
   cap update
@@ -817,6 +1028,9 @@ Subcommands:
   summary [keyword]     Table of all captures, or search across them.
                         Named patterns: passwords, hashes, users, emails,
                         ports, vulns, urls  — or any literal keyword / regex.
+  grab [command...]     Retroactively capture the last command's output from
+                        tmux scrollback. Auto-detects from shell history or
+                        accepts an explicit command. Supports -n, -s, -a.
   ls [subdir]           Browse captures interactively (fzf) or list them.
                         Accepts any subdir name, not just built-in ones.
   update                Update nocap to the latest version via pipx
@@ -834,6 +1048,8 @@ Examples:
   cap -n after-creds nmap -sCV 10.10.10.5
   cap --auto nmap -sCV 10.10.10.5
   cap -D feroxbuster -u http://10.10.10.5
+  cap grab
+  cap grab -n initial nmap -sCV 10.10.10.5
   cap last
   cap ls
   cap ls recon

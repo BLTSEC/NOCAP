@@ -48,6 +48,7 @@ pipx install ./nocap
 
 ```
 cap [options] [subdir] <command> [args...]
+cap grab [options] [command...]
 cap last | cat | tail | open | rm | summary | render
 cap ls [subdir]
 cap update
@@ -74,6 +75,7 @@ cap update
 | `cap summary [keyword]` | Compact table of all captures, or search across them by keyword |
 | `cap render [file]` | Render a capture (or the last one) through the VT100 cleaner — strips ANSI, progress bars, cursor noise |
 | `cap ls [subdir]` | Browse captures interactively (fzf) or list them. Accepts any subdir name. |
+| `cap grab [cmd...]` | Retroactively capture the last command's output from tmux scrollback |
 | `cap update` | Update nocap to the latest version via pipx |
 
 ### Environment
@@ -118,6 +120,11 @@ cap nmap -sCV 10.10.10.5             # → recon/ automatically
 
 # Preview routing without running
 cap -D feroxbuster -u http://10.10.10.5
+
+# Retroactive capture — forgot to cap? grab it from tmux scrollback
+cap grab                                     # auto-detect last command
+cap grab nmap -sCV 10.10.10.5               # explicit command
+cap grab -n initial -s recon                 # with note + subdir
 
 # Work with the last captured file
 cap last                             # print the path
@@ -319,6 +326,36 @@ cap ls pivoting    # any custom subdir works
 
 ---
 
+## `cap grab`
+
+Retroactive capture — for when you forget to `cap` a command. If you're in tmux, `cap grab`
+pulls the last command's output from the pane scrollback and writes a standard cap file.
+
+```bash
+# Auto-detect last command from shell history
+cap grab
+
+# Explicit command — searches scrollback for this specific output
+cap grab nmap -sCV 10.10.10.5
+
+# Works with all standard flags
+cap grab -n initial                          # add a note
+cap grab -s recon                            # route to subdir
+cap grab -a                                  # auto-route by tool name
+cap grab -n after-creds nmap -sCV 10.10.10.5 # explicit command + note
+```
+
+How it works:
+1. Captures the full tmux pane scrollback (`tmux capture-pane`)
+2. Detects the last command from shell history (zsh and bash), or uses the command you provide
+3. Extracts the output between the command line and the `cap grab` prompt
+4. Writes a file with the same `Command: / Date: / ---` header as a live capture
+
+Requires tmux — that's where the scrollback buffer lives. Outside tmux, you'll get a
+clear error with a tip to use `cap <command>` next time.
+
+---
+
 ## Updating
 
 ```bash
@@ -437,8 +474,8 @@ pipx install -e ".[dev]"   # installs nocap + pytest in editable mode
 PYTHONPATH=src pytest tests/ -v
 ```
 
-Tests cover filename generation (`tests/test_filename.py`) and argument
-parsing (`tests/test_parsing.py`).
+Tests cover filename generation (`tests/test_filename.py`), argument
+parsing (`tests/test_parsing.py`), and grab helpers (`tests/test_grab.py`).
 
 ---
 
