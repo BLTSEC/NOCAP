@@ -13,6 +13,9 @@ directory routing, auto subdir routing, collision avoidance, live TTY output,
 completion status with elapsed time, and interactive capture browsing.
 No more `| tee recon/nmap-sCV.txt` one-liners.
 
+[![Blog Post](https://img.shields.io/badge/Blog-NOCAP:%20Never%20Lose%20Scan%20Output%20Again-blue)](https://bltsec.com/posts/nocap/)
+[![YouTube](https://img.shields.io/badge/YouTube-Watch%20the%20Demo-red?logo=youtube)](https://youtu.be/tUDXFoZIkg4)
+
 ```bash
 # $TARGET set or op_* tmux session active → routes to /workspace/<target>/
 export TARGET=10.10.10.5
