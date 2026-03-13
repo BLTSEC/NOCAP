@@ -170,6 +170,29 @@ class TestExtractOutput:
         assert "whoami" not in result
         assert "root" not in result
 
+    def test_p10k_prompt_with_ansi_codes(self):
+        """Prompt lines with ANSI color codes should still be detected."""
+        scrollback = (
+            "\033[38;5;240m╭─\033[0m    /tmp ···· \033[32m✔\033[0m  10:27:27 \n"
+            "\033[38;5;240m╰─\033[0m nmap -p 80 scanme.nmap.org\n"
+            "Starting Nmap 7.98\n"
+            "80/tcp open  http\n"
+            "Nmap done: 1 IP address\n"
+            "\n"
+            "\033[38;5;240m╭─\033[0m    /tmp ···· \033[32m✔\033[0m  10:27:31 \n"
+            "\033[38;5;240m╰─\033[0m nmap -p 53 scanme.nmap.org\n"
+            "Starting Nmap 7.98\n"
+            "53/tcp open  domain\n"
+            "Nmap done: 1 IP address\n"
+            "\n"
+            "\033[38;5;240m╭─\033[0m    /tmp ···· \033[32m✔\033[0m  10:27:35 \n"
+            "\033[38;5;240m╰─\033[0m cap grab nmap -p 80\n"
+        )
+        result = _extract_output(scrollback, "nmap -p 80")
+        assert "80/tcp open  http" in result
+        assert "53/tcp" not in result
+        assert "cap grab" not in result
+
     def test_no_scrollback(self):
         result = _extract_output("", "ls")
         assert result == ""

@@ -151,9 +151,15 @@ _PROMPT_LINE_RE = re.compile(
 _BASIC_PROMPT_RE = re.compile(r"[@:~].*[$#%>]\s")
 
 
+def _strip_ansi(text: str) -> str:
+    """Remove ANSI escape codes from *text*."""
+    return _ANSI_RE.sub("", text)
+
+
 def _is_prompt_line(line: str) -> bool:
     """Return True if *line* looks like shell prompt decoration."""
-    return bool(_PROMPT_LINE_RE.search(line.strip()))
+    clean = _strip_ansi(line).strip()
+    return bool(_PROMPT_LINE_RE.search(clean))
 
 
 def _starts_new_prompt(line: str) -> bool:
@@ -162,12 +168,12 @@ def _starts_new_prompt(line: str) -> bool:
     Catches multi-line prompts (box-drawing chars), common prompt suffixes,
     and basic ``user@host:path$`` patterns.
     """
-    stripped = line.strip()
-    if not stripped:
+    clean = _strip_ansi(line).strip()
+    if not clean:
         return False
-    if _is_prompt_line(stripped):
+    if _PROMPT_LINE_RE.search(clean):
         return True
-    if _BASIC_PROMPT_RE.search(stripped):
+    if _BASIC_PROMPT_RE.search(clean):
         return True
     return False
 
@@ -196,26 +202,29 @@ def _extract_output(scrollback: str, command: str) -> str:
     while lines and lines[-1].strip() == "":
         lines.pop()
 
+    # Build ANSI-clean versions for searching (raw lines kept for output)
+    clean_lines = [_strip_ansi(l) for l in lines]
+
     # Search backward for the command line.  Prefer lines that look like a
-    # shell prompt (contain $ # % >) followed by the command, so we don't
-    # accidentally match an output line that happens to contain the string.
-    _PROMPT_CHARS = {"$", "#", "%", ">"}
+    # shell prompt (contain $ # % > or box-drawing chars) followed by the
+    # command, so we don't accidentally match an output line.
+    _PROMPT_CHARS = {"$", "#", "%", ">", "╰", "╭", "❯", "➜"}
     cmd_idx = None
-    for i in range(len(lines) - 1, -1, -1):
-        line = lines[i]
-        if command not in line:
+    for i in range(len(clean_lines) - 1, -1, -1):
+        cl = clean_lines[i]
+        if command not in cl:
             continue
         # Check if this looks like a prompt line: a prompt char appears
         # before the command string in the line
-        pos = line.find(command)
-        prefix = line[:pos]
+        pos = cl.find(command)
+        prefix = cl[:pos]
         if any(ch in prefix for ch in _PROMPT_CHARS):
             cmd_idx = i
             break
     # If no prompt-style match found, fall back to plain substring match
     if cmd_idx is None:
-        for i in range(len(lines) - 1, -1, -1):
-            if command in lines[i]:
+        for i in range(len(clean_lines) - 1, -1, -1):
+            if command in clean_lines[i]:
                 cmd_idx = i
                 break
 
