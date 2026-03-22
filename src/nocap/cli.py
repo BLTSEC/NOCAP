@@ -178,6 +178,15 @@ def _starts_new_prompt(line: str) -> bool:
     return False
 
 
+def _looks_like_prompt_command(clean_line: str, command: str) -> bool:
+    """Return True if *clean_line* looks like a prompt that ran *command*."""
+    pos = clean_line.find(command)
+    if pos < 0:
+        return False
+    prefix = clean_line[:pos]
+    return _starts_new_prompt(prefix)
+
+
 def _extract_output(scrollback: str, command: str) -> str:
     """Extract the output of *command* from tmux scrollback text.
 
@@ -206,19 +215,14 @@ def _extract_output(scrollback: str, command: str) -> str:
     clean_lines = [_strip_ansi(l) for l in lines]
 
     # Search backward for the command line.  Prefer lines that look like a
-    # shell prompt (contain $ # % > or box-drawing chars) followed by the
-    # command, so we don't accidentally match an output line.
-    _PROMPT_CHARS = {"$", "#", "%", ">", "╰", "╭", "❯", "➜"}
+    # shell prompt followed by the command, so we don't accidentally match
+    # an output line that happens to contain the command string.
     cmd_idx = None
     for i in range(len(clean_lines) - 1, -1, -1):
         cl = clean_lines[i]
         if command not in cl:
             continue
-        # Check if this looks like a prompt line: a prompt char appears
-        # before the command string in the line
-        pos = cl.find(command)
-        prefix = cl[:pos]
-        if any(ch in prefix for ch in _PROMPT_CHARS):
+        if _looks_like_prompt_command(cl, command):
             cmd_idx = i
             break
     # If no prompt-style match found, fall back to plain substring match
@@ -238,11 +242,10 @@ def _extract_output(scrollback: str, command: str) -> str:
         output_lines = lines[cmd_idx + 1 : end_idx]
     else:
         # Fallback: couldn't find the command — grab everything after the
-        # last prompt-like line (line ending with $ or # or >)
+        # last prompt-like line.
         prompt_idx = None
-        for i in range(len(lines) - 1, -1, -1):
-            stripped = lines[i].rstrip()
-            if stripped and stripped[-1] in ("$", "#", ">"):
+        for i in range(len(clean_lines) - 1, -1, -1):
+            if _starts_new_prompt(clean_lines[i]):
                 prompt_idx = i
                 break
         if prompt_idx is not None:

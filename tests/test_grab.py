@@ -193,6 +193,29 @@ class TestExtractOutput:
         assert "53/tcp" not in result
         assert "cap grab" not in result
 
+    def test_alt_prompt_glyph_preferred_over_output_substring(self):
+        """Prompt glyphs like `›` should win over later output matches."""
+        scrollback = (
+            "› echo hi\n"
+            "running echo hi now\n"
+            "hi\n"
+            "› cap grab echo hi\n"
+        )
+        result = _extract_output(scrollback, "echo hi")
+        assert result == "running echo hi now\nhi"
+
+    def test_command_not_found_fallback_strips_ansi_and_handles_percent_prompt(self):
+        """Fallback prompt detection should handle ANSI-colored `%` prompts."""
+        scrollback = (
+            "\033[32muser@box %\033[0m whoami\n"
+            "root\n"
+            "\033[32muser@box %\033[0m cap grab\n"
+        )
+        result = _extract_output(scrollback, "nonexistent-command")
+        assert result == "root"
+        assert "\033[" not in result
+        assert "user@box" not in result
+
     def test_no_scrollback(self):
         result = _extract_output("", "ls")
         assert result == ""
