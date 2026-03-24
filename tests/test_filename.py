@@ -41,17 +41,46 @@ def test_url_stripped():
     assert result == "gobuster_dir"
 
 
+def test_url_hostname_added_as_context():
+    result = _build_filename(["gobuster", "dir", "-u", "https://portal.example.local/login", "-w", "/wl.txt"])
+    assert result == "gobuster_dir_portal"
+
+
 def test_absolute_path_stripped():
     result = _build_filename(["hashcat", "-m", "1000", "/path/to/hashes.txt"])
     assert "/path" not in result
     assert "hashes" not in result
 
 
-def test_hostname_stripped():
-    # Dotted tokens (hostnames, filenames) are stripped
+def test_hostname_label_added():
+    # Dotted hostnames become concise target labels
     result = _build_filename(["nmap", "-sCV", "target.htb"])
-    assert "target" not in result
-    assert result == "nmap_sCV"
+    assert result == "nmap_sCV_target"
+
+
+def test_multiple_hostnames_kept_concisely():
+    result = _build_filename([
+        "nmap", "-Pn", "-sT", "-sV",
+        "castelblack.north.sevenkingdoms.local",
+        "winterfell.north.sevenkingdoms.local",
+    ])
+    assert result == "nmap_Pn_sT_sV_castelblack_winterfell"
+
+
+def test_many_hostnames_collapsed():
+    result = _build_filename([
+        "nmap",
+        "castelblack.north.sevenkingdoms.local",
+        "winterfell.north.sevenkingdoms.local",
+        "kingslanding.crownlands.sevenkingdoms.local",
+    ])
+    assert result == "nmap_castelblack_plus2"
+
+
+def test_relative_filename_not_treated_as_target():
+    result = _build_filename(["hashcat", "-m", "1000", "hashes.txt", "/wl.txt"])
+    assert "hashes" not in result
+    assert result == "hashcat_m"
 
 
 # ---------------------------------------------------------------------------
@@ -120,6 +149,14 @@ def test_note_sanitised():
     assert "/" not in result
     assert "!" not in result
     assert "mynotehere" in result
+
+
+def test_note_preserved_with_context():
+    result = _build_filename(
+        ["nmap", "-Pn", "-sT", "-sV", "castelblack.north.sevenkingdoms.local"],
+        note="after-creds",
+    )
+    assert result == "nmap_Pn_sT_sV_castelblack_after-creds"
 
 
 # ---------------------------------------------------------------------------

@@ -24,6 +24,7 @@ from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Callable
+from urllib.parse import urlsplit
 
 from nocap.tools import SKIP_FLAGS, SUBDIRS, TOOL_SUBDIRS
 
@@ -37,6 +38,14 @@ _IP_RE  = re.compile(r"^\d{1,3}(\.\d{1,3}){3}(/\d+)?$")
 _IP6_RE = re.compile(r"^([0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}(/\d+)?$")
 _URL_RE = re.compile(r"^https?://")
 _NUM_RE = re.compile(r"^\d+(,\d+)*$")
+_HOSTLIKE_RE = re.compile(r"^[A-Za-z0-9.-]+$")
+
+_COMMON_FILE_EXTS = frozenset({
+    "7z", "bak", "cfg", "conf", "config", "csv", "db", "dll", "doc",
+    "docx", "exe", "gz", "html", "ini", "jar", "json", "key", "log",
+    "lst", "md", "pdf", "pem", "php", "ps1", "py", "sh", "sql", "sqlite",
+    "tar", "tgz", "toml", "txt", "xml", "yaml", "yml", "zip",
+})
 
 # Strip ANSI escape codes for clean text matching in summary search
 _ANSI_RE = re.compile(r"\x1b\[[?!0-9;]*[a-zA-Z]")
@@ -316,18 +325,94 @@ def _get_base_dir() -> Path | None:
 def _build_filename(cmd: list[str], note: str = "") -> str:
     """Derive a descriptive filename stem from a command + args list."""
     tool = Path(cmd[0]).name
-    parts: list[str] = [tool]
+    syntax_parts: list[str] = []
+    context_parts: list[str] = []
     skip_next = False
+    prev_flag = ""
+
+    def _sanitize_part(value: str, max_len: int = 15) -> str:
+        clean = re.sub(r"^-+", "", value)
+        clean = re.sub(r"[^a-zA-Z0-9_-]", "", clean)
+        return clean[:max_len]
+
+    def _extract_host_label(value: str) -> str:
+        if (
+            not value
+            or value.startswith("/")
+            or "/" in value
+            or "=" in value
+            or _IP_RE.match(value)
+            or _IP6_RE.match(value)
+            or _URL_RE.match(value)
+            or not _HOSTLIKE_RE.match(value)
+            or "." not in value
+        ):
+            return ""
+
+        labels = [part for part in value.split(".") if part]
+        if len(labels) < 2:
+            return ""
+
+        if labels[-1].lower() in _COMMON_FILE_EXTS:
+            return ""
+
+        return _sanitize_part(labels[0], max_len=12)
+
+    def _extract_url_label(value: str) -> str:
+        if not _URL_RE.match(value):
+            return ""
+
+        try:
+            host = urlsplit(value).hostname or ""
+        except ValueError:
+            return ""
+
+        if not host or _IP_RE.match(host) or _IP6_RE.match(host):
+            return ""
+
+        return _extract_host_label(host)
+
+    def _collapse_context(parts: list[str]) -> list[str]:
+        seen: set[str] = set()
+        deduped: list[str] = []
+        for part in parts:
+            if part and part not in seen:
+                seen.add(part)
+                deduped.append(part)
+
+        if len(deduped) <= 2:
+            return deduped
+
+        return [deduped[0], f"plus{len(deduped) - 1}"]
+
+    def _joined_len(parts: list[str]) -> int:
+        if not parts:
+            return 0
+        return sum(len(part) for part in parts) + (len(parts) - 1)
 
     for arg in cmd[1:]:
         if skip_next:
+            if prev_flag in ("-u", "--url"):
+                label = _extract_url_label(arg)
+                if label:
+                    context_parts.append(label)
+            elif prev_flag in ("-d", "--domain"):
+                label = _extract_host_label(arg)
+                if label:
+                    context_parts.append(label)
             skip_next = False
+            prev_flag = ""
             continue
 
         if _IP_RE.match(arg):
             continue
         if _IP6_RE.match(arg):
             continue
+        if not arg.startswith("-"):
+            label = _extract_url_label(arg)
+            if label:
+                context_parts.append(label)
+                continue
         if _URL_RE.match(arg):
             continue
         if arg.startswith("/"):
@@ -336,24 +421,41 @@ def _build_filename(cmd: list[str], note: str = "") -> str:
             _, _, val = arg.partition("=")
             if val.startswith("/") or val.startswith("./"):
                 continue
+        if not arg.startswith("-"):
+            label = _extract_host_label(arg)
+            if label:
+                context_parts.append(label)
+                continue
         if not arg.startswith("-") and "." in arg:
             continue
         if _NUM_RE.match(arg):
             continue
         if arg in SKIP_FLAGS:
+            prev_flag = arg
             skip_next = True
             continue
 
-        clean = re.sub(r"^-+", "", arg)
-        clean = re.sub(r"[^a-zA-Z0-9_-]", "", clean)
-        clean = clean[:15]
+        clean = _sanitize_part(arg)
         if clean:
-            parts.append(clean)
+            syntax_parts.append(clean)
 
-    if note:
-        note_clean = re.sub(r"[^a-zA-Z0-9_-]", "", note)[:20]
-        if note_clean:
-            parts.append(note_clean)
+    parts: list[str] = [tool]
+    note_clean = re.sub(r"[^a-zA-Z0-9_-]", "", note)[:20] if note else ""
+    context_parts = _collapse_context(context_parts)
+
+    reserved_note = (1 + len(note_clean)) if note_clean else 0
+    reserved_context = _joined_len(context_parts) + (1 if context_parts else 0)
+
+    for part in syntax_parts:
+        if _joined_len(parts + [part]) + reserved_context + reserved_note <= 60:
+            parts.append(part)
+
+    for part in context_parts:
+        if _joined_len(parts + [part]) + reserved_note <= 60:
+            parts.append(part)
+
+    if note_clean and _joined_len(parts + [note_clean]) <= 60:
+        parts.append(note_clean)
 
     name = "_".join(parts)
     name = re.sub(r"_+", "_", name).rstrip("_")[:60]

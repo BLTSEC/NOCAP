@@ -369,19 +369,26 @@ Requires pipx (the same tool used to install nocap).
 
 ## Auto-Named Output
 
-NOCAP derives a clean filename from your command. IPs (v4 and v6), URLs, absolute
-paths, wordlists, hostnames, and numeric values are stripped automatically.
-Meaningful flags and subcommands become the filename.
+NOCAP derives a clean filename from your command. IPs (v4 and v6), absolute
+paths, wordlists, and raw numeric values are stripped automatically. Meaningful
+flags and subcommands become the filename, and safe target context is added
+when it helps — usually the first label from a hostname or URL.
+
+Full FQDNs and full URLs are not dumped into the filename. NOCAP keeps them
+concise by using short target hints such as `target`, `portal`, or
+`castelblack_winterfell`.
 
 | Command | Output file |
 |---|---|
 | `cap nmap -sCV 10.10.10.5` | `nmap_sCV.txt` |
+| `cap nmap -sCV target.htb` | `nmap_sCV_target.txt` |
 | `cap nmap -p- --min-rate 5000 10.10.10.5` | `nmap_p-_min-rate.txt` |
-| `cap gobuster dir -u http://10.10.10.5 -w /wl.txt` | `gobuster_dir.txt` |
+| `cap nmap -Pn -sT -sV castelblack.north.sevenkingdoms.local winterfell.north.sevenkingdoms.local` | `nmap_Pn_sT_sV_castelblack_winterfell.txt` |
+| `cap gobuster dir -u https://portal.example.local/login -w /wl.txt` | `gobuster_dir_portal.txt` |
 | `cap netexec smb 10.10.10.5 -u admin -p pass` | `netexec_smb.txt` |
 | `cap feroxbuster -u http://10.10.10.5 -x php,html` | `feroxbuster_x_phphtml.txt` |
-| `cap loot hashcat -m 1000 hashes.txt /wl.txt` | `loot/hashcat_m_1000.txt` |
-| `cap -n after-creds nmap -sCV 10.10.10.5` | `nmap_sCV_after-creds.txt` |
+| `cap loot hashcat -m 1000 hashes.txt /wl.txt` | `loot/hashcat_m.txt` |
+| `cap -n after-creds nmap -sCV target.htb` | `nmap_sCV_target_after-creds.txt` |
 
 Collisions are resolved automatically and atomically (race-safe):
 
