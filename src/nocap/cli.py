@@ -91,6 +91,17 @@ _SUMMARY_PATTERNS: dict[str, re.Pattern[str]] = {
 _LAST_FILE = Path.home() / ".cache" / "nocap" / "last"
 
 # ---------------------------------------------------------------------------
+# Filename / output constants
+# ---------------------------------------------------------------------------
+
+_STEM_MAX_LEN = 60       # Max length for the output filename stem
+_PART_MAX_LEN = 15       # Max length for individual filename parts
+_HOST_LABEL_MAX_LEN = 12 # Max length for hostname label in filename
+_NOTE_MAX_LEN = 20       # Max length for user-supplied note label
+_READ_CHUNK = 65536      # Chunk size for line-counting reads
+_VT100_COL_CAP = 500     # Safety cap for VT100 cursor column position
+
+# ---------------------------------------------------------------------------
 # tmux / scrollback helpers (for `cap grab`)
 # ---------------------------------------------------------------------------
 
@@ -126,9 +137,10 @@ def _last_command_from_history() -> str | None:
 
     try:
         raw = hist_path.read_bytes()
-        # zsh uses a mix of UTF-8 and meta-encoded bytes; best-effort decode
-        text = raw.decode("utf-8", errors="replace")
-    except Exception:
+        # zsh uses a mix of UTF-8 and meta-encoded bytes; surrogateescape
+        # preserves undecodable bytes without silent corruption
+        text = raw.decode("utf-8", errors="surrogateescape")
+    except (OSError, UnicodeDecodeError):
         return None
 
     lines = text.splitlines()
@@ -157,7 +169,7 @@ _PROMPT_LINE_RE = re.compile(
 )
 
 # Detects basic single-line prompts: user@host:path$ , root#, etc.
-_BASIC_PROMPT_RE = re.compile(r"[@:~].*[$#%>]\s")
+_BASIC_PROMPT_RE = re.compile(r"[@:~].*[$#%>]\s?")
 
 
 def _strip_ansi(text: str) -> str:
@@ -279,7 +291,7 @@ def _get_version() -> str:
     try:
         from importlib.metadata import version
         return version("nocap")
-    except Exception:
+    except (ImportError, ModuleNotFoundError):
         from nocap import __version__
         return __version__
 
@@ -313,7 +325,7 @@ def _get_base_dir() -> Path | None:
         if sess.startswith("op_"):
             tgt = sess.removeprefix("op_").replace("_", ".")
             return workspace / tgt
-    except Exception:
+    except (OSError, subprocess.TimeoutExpired):
         pass
 
     return None
@@ -330,7 +342,7 @@ def _build_filename(cmd: list[str], note: str = "") -> str:
     skip_next = False
     prev_flag = ""
 
-    def _sanitize_part(value: str, max_len: int = 15) -> str:
+    def _sanitize_part(value: str, max_len: int = _PART_MAX_LEN) -> str:
         clean = re.sub(r"^-+", "", value)
         clean = re.sub(r"[^a-zA-Z0-9_-]", "", clean)
         return clean[:max_len]
@@ -356,16 +368,13 @@ def _build_filename(cmd: list[str], note: str = "") -> str:
         if labels[-1].lower() in _COMMON_FILE_EXTS:
             return ""
 
-        return _sanitize_part(labels[0], max_len=12)
+        return _sanitize_part(labels[0], max_len=_HOST_LABEL_MAX_LEN)
 
     def _extract_url_label(value: str) -> str:
         if not _URL_RE.match(value):
             return ""
 
-        try:
-            host = urlsplit(value).hostname or ""
-        except ValueError:
-            return ""
+        host = urlsplit(value).hostname or ""
 
         if not host or _IP_RE.match(host) or _IP6_RE.match(host):
             return ""
@@ -440,25 +449,29 @@ def _build_filename(cmd: list[str], note: str = "") -> str:
             syntax_parts.append(clean)
 
     parts: list[str] = [tool]
-    note_clean = re.sub(r"[^a-zA-Z0-9_-]", "", note)[:20] if note else ""
+    note_sanitized = re.sub(r"[^a-zA-Z0-9_-]", "", note) if note else ""
+    if note_sanitized and len(note_sanitized) > _NOTE_MAX_LEN:
+        print(f"\033[33mnocap: note truncated to {_NOTE_MAX_LEN} chars: "
+              f"{note_sanitized[:_NOTE_MAX_LEN]}\033[0m", file=sys.stderr)
+    note_clean = note_sanitized[:_NOTE_MAX_LEN]
     context_parts = _collapse_context(context_parts)
 
     reserved_note = (1 + len(note_clean)) if note_clean else 0
     reserved_context = _joined_len(context_parts) + (1 if context_parts else 0)
 
     for part in syntax_parts:
-        if _joined_len(parts + [part]) + reserved_context + reserved_note <= 60:
+        if _joined_len(parts + [part]) + reserved_context + reserved_note <= _STEM_MAX_LEN:
             parts.append(part)
 
     for part in context_parts:
-        if _joined_len(parts + [part]) + reserved_note <= 60:
+        if _joined_len(parts + [part]) + reserved_note <= _STEM_MAX_LEN:
             parts.append(part)
 
-    if note_clean and _joined_len(parts + [note_clean]) <= 60:
+    if note_clean and _joined_len(parts + [note_clean]) <= _STEM_MAX_LEN:
         parts.append(note_clean)
 
     name = "_".join(parts)
-    name = re.sub(r"_+", "_", name).rstrip("_")[:60]
+    name = re.sub(r"_+", "_", name).rstrip("_")[:_STEM_MAX_LEN]
     return name or tool
 
 # ---------------------------------------------------------------------------
@@ -487,7 +500,7 @@ def _claim_outfile(outdir: Path, stem: str) -> Path:
     n = 2
     while True:
         try:
-            fd = os.open(str(candidate), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+            fd = os.open(str(candidate), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
             os.close(fd)
             return candidate
         except FileExistsError:
@@ -504,7 +517,7 @@ def _term_size() -> tuple[int, int]:
         rows, cols = struct.unpack_from("HH", ts)
         if rows > 0 and cols > 0:
             return rows, cols
-    except Exception:
+    except (OSError, AttributeError):
         pass
     return 24, 80
 
@@ -513,7 +526,7 @@ def _set_winsize(fd: int, rows: int, cols: int) -> None:
     try:
         ws = struct.pack("HHHH", rows, cols, 0, 0)
         fcntl.ioctl(fd, termios.TIOCSWINSZ, ws)
-    except Exception:
+    except OSError:
         pass
 
 
@@ -689,9 +702,9 @@ def _vt100_render(data: str) -> str:
                 if final == "D":
                     pos = max(0, pos - (params[0] or 1))
                 elif final == "C":
-                    pos += params[0] or 1
+                    pos = min(pos + (params[0] or 1), _VT100_COL_CAP)
                 elif final == "G":
-                    pos = max(0, (params[0] or 1) - 1)
+                    pos = min(max(0, (params[0] or 1) - 1), _VT100_COL_CAP)
                 elif final == "K":
                     p = params[0]
                     if p == 0:
@@ -830,6 +843,9 @@ def _last_path() -> Path:
         print("nocap: no captures yet", file=sys.stderr)
         sys.exit(1)
     path = Path(_LAST_FILE.read_text().strip())
+    if path.is_symlink():
+        print("nocap: last capture path is a symlink — refusing", file=sys.stderr)
+        sys.exit(1)
     if not path.exists():
         print(f"nocap: last capture no longer exists: {path}", file=sys.stderr)
         sys.exit(1)
@@ -880,9 +896,9 @@ def _count_lines(path: Path) -> int:
         with path.open("rb") as fh:
             return sum(
                 chunk.count(b"\n")
-                for chunk in iter(lambda: fh.read(65536), b"")
+                for chunk in iter(lambda: fh.read(_READ_CHUNK), b"")
             )
-    except Exception:
+    except OSError:
         return 0
 
 
@@ -938,7 +954,7 @@ def _cmd_summary(args: list[str] | None = None) -> None:
                     clean = _ANSI_RE.sub("", line.rstrip("\r\n"))
                     if pattern.search(clean):
                         matches.append(clean)
-        except Exception:
+        except OSError:
             continue
 
         if matches:
@@ -1018,7 +1034,8 @@ def _cmd_grab(args: list[str] | None = None) -> None:
     # Extract the output
     output = _extract_output(scrollback, command_str)
     if not output:
-        print(f"\033[33mnocap: warning: no output found for: {command_str}\033[0m", file=sys.stderr)
+        print(f"\033[33mnocap: no output found for: {command_str}\033[0m", file=sys.stderr)
+        sys.exit(1)
 
     # Auto-route subdir if requested
     if auto and not subdir and cmd_list:
