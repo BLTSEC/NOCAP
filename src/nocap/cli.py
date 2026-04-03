@@ -312,7 +312,12 @@ def _get_base_dir() -> Path | None:
     if not workspace.is_dir():
         return None
 
-    target = os.environ.get("TARGET", "").strip()
+    # LOADOUT_TARGET is the normalized workspace name (e.g. 10.10.10.5_1337)
+    # set by both `loadout start` and `settarget`.  Prefer it over TARGET
+    # which holds the raw host IP (for tool compatibility with nmap etc.).
+    target = os.environ.get("LOADOUT_TARGET", "").strip()
+    if not target:
+        target = os.environ.get("TARGET", "").strip()
     if target:
         return workspace / target
 
