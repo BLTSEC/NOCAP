@@ -1,7 +1,7 @@
 # NOCAP
 
 <p align="center">
-  <img src="assets/nocap.jpg" alt="nocap" width="600">
+  <img src="assets/nocap.jpg" alt="nocap" width="100%">
 </p>
 
 > **N**o-overhead **C**apture. **A**utomatic **P**ath routing.
