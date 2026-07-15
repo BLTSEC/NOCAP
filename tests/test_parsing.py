@@ -1,6 +1,5 @@
 """Tests for CLI argument parsing via the module-level _PARSER instance."""
 
-import pytest
 from nocap.cli import _PARSER
 
 

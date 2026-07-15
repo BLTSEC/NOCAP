@@ -1,12 +1,8 @@
 """Tests for cap grab helpers — _extract_output and _last_command_from_history."""
 
-import os
 import textwrap
-from pathlib import Path
 
-import pytest
-
-from nocap.cli import _extract_output, _last_command_from_history
+from nocap.subcommands import _extract_output, _last_command_from_history
 
 
 # ---------------------------------------------------------------------------
@@ -203,6 +199,41 @@ class TestExtractOutput:
         )
         result = _extract_output(scrollback, "echo hi")
         assert result == "running echo hi now\nhi"
+
+    def test_starship_prompt_stops_at_next_command(self):
+        scrollback = (
+            "❯ first-command\n"
+            "first output\n"
+            "❯ second-command\n"
+            "second output\n"
+            "❯ cap grab first-command\n"
+        )
+        result = _extract_output(scrollback, "first-command")
+        assert result == "first output"
+
+    def test_minimal_shell_prompt_stops_at_next_command(self):
+        scrollback = (
+            "$ first-command\n"
+            "first output\n"
+            "$ second-command\n"
+            "second output\n"
+            "$ cap grab first-command\n"
+        )
+        result = _extract_output(scrollback, "first-command")
+        assert result == "first output"
+
+    def test_output_ending_in_prompt_characters_is_not_truncated(self):
+        scrollback = (
+            "user@box:~$ print-report\n"
+            "progress: 100%\n"
+            "price: $\n"
+            "redirect ->\n"
+            "<result>\n"
+            "final line\n"
+            "user@box:~$ cap grab print-report\n"
+        )
+        result = _extract_output(scrollback, "print-report")
+        assert result == "progress: 100%\nprice: $\nredirect ->\n<result>\nfinal line"
 
     def test_command_not_found_fallback_strips_ansi_and_handles_percent_prompt(self):
         """Fallback prompt detection should handle ANSI-colored `%` prompts."""

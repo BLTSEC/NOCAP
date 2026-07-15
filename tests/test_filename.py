@@ -1,7 +1,6 @@
 """Tests for _build_filename — pure logic, no subprocess or filesystem needed."""
 
-import pytest
-from nocap.cli import _build_filename
+from nocap.filename import _build_filename
 
 
 # ---------------------------------------------------------------------------
@@ -18,6 +17,14 @@ def test_tool_with_flag():
 
 def test_tool_with_subcommand():
     assert _build_filename(["gobuster", "dir"]) == "gobuster_dir"
+
+
+def test_tool_name_sanitised():
+    assert _build_filename(["/tmp/my tool.py"]) == "mytoolpy"
+
+
+def test_tool_name_with_no_safe_characters_uses_fallback():
+    assert _build_filename(["🔥"]) == "command"
 
 
 # ---------------------------------------------------------------------------
@@ -44,6 +51,10 @@ def test_url_stripped():
 def test_url_hostname_added_as_context():
     result = _build_filename(["gobuster", "dir", "-u", "https://portal.example.local/login", "-w", "/wl.txt"])
     assert result == "gobuster_dir_portal"
+
+
+def test_malformed_ipv6_url_does_not_crash():
+    assert _build_filename(["curl", "http://["]) == "curl"
 
 
 def test_absolute_path_stripped():
