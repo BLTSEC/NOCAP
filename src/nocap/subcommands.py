@@ -486,15 +486,12 @@ def _cmd_summary(args: list[str] | None = None) -> None:
 
 
 def _cmd_update(args: list[str] | None = None) -> None:
-    """Re-install nocap from GitHub via pipx."""
+    """Upgrade nocap using the source recorded by pipx."""
     _require_no_args("update", args)
     if not shutil.which("pipx"):
         print("nocap: pipx not found — install pipx or update manually", file=sys.stderr)
         sys.exit(1)
-    sys.exit(subprocess.run([
-        "pipx", "install", "--force",
-        "git+https://github.com/BLTSEC/NOCAP.git",
-    ]).returncode)
+    sys.exit(subprocess.run(["pipx", "upgrade", "nocap"]).returncode)
 
 
 def _cmd_render(args: list[str] | None = None) -> None:

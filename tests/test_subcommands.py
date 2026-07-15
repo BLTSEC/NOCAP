@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -67,3 +68,21 @@ def test_summary_search_ignores_matches_in_unrelated_text(tmp_path, monkeypatch,
     captured = capsys.readouterr()
     assert captured.out == ""
     assert "no matches" in captured.err
+
+
+def test_update_uses_pipx_upgrade(monkeypatch):
+    invoked: list[list[str]] = []
+
+    monkeypatch.setattr(subcommands.shutil, "which", lambda command: "/usr/bin/pipx")
+
+    def fake_run(command: list[str]):
+        invoked.append(command)
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setattr(subcommands.subprocess, "run", fake_run)
+
+    with pytest.raises(SystemExit) as exc:
+        subcommands._cmd_update([])
+
+    assert exc.value.code == 0
+    assert invoked == [["pipx", "upgrade", "nocap"]]
