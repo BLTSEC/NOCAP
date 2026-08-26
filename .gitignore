@@ -5,3 +5,8 @@ dist/
 build/
 .env
 .env.*
+.nocap/
+.claude/
+.pytest_cache/
+.ruff_cache/
+.venv/

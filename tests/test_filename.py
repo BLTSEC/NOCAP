@@ -1,7 +1,8 @@
 """Tests for _build_filename — pure logic, no subprocess or filesystem needed."""
 
-from nocap.filename import _build_filename
+import pytest
 
+from nocap.filename import _build_filename, _effective_tool
 
 # ---------------------------------------------------------------------------
 # Basic tool name extraction
@@ -20,7 +21,7 @@ def test_tool_with_subcommand():
 
 
 def test_tool_name_sanitised():
-    assert _build_filename(["/tmp/my tool.py"]) == "mytoolpy"
+    assert _build_filename(["/tmp/my tool.py"]) == "mytool"
 
 
 def test_tool_name_with_no_safe_characters_uses_fallback():
@@ -214,3 +215,136 @@ def test_key_value_non_path_kept():
     # The test just confirms it doesn't crash
     assert isinstance(result, str)
     assert len(result) > 0
+
+
+def test_sudo_wrapper_uses_effective_tool():
+    assert _build_filename(["sudo", "-n", "nmap", "-sCV", "10.10.10.5"]) == "nmap_sCV"
+
+
+def test_env_wrapper_skips_assignments():
+    assert _build_filename(["env", "DEBUG=1", "nmap", "-Pn", "target.htb"]) == "nmap_Pn_target"
+
+
+def test_shell_wrapper_ignores_long_options_before_command_flag():
+    assert _build_filename(["bash", "--norc", "-c", "nmap -sCV 10.10.10.5"]) == "nmap"
+
+
+def test_python_module_uses_module_as_effective_tool():
+    assert _build_filename(["python3", "-m", "http.server", "8000"]) == "httpserver"
+
+
+def test_configured_alias_is_used_for_naming():
+    assert _build_filename(["cme", "smb", "dc01.corp.local", "--shares"], aliases={"cme": "nxc"}) == "nxc_smb_shares"
+
+
+def test_nxc_profile_drops_single_label_target_and_names_action():
+    command = ["nxc", "smb", "TPM-DC", "-u", "guest", "-p", "", "--pass-pol"]
+    assert _build_filename(command) == "nxc_smb_passpol"
+
+
+def test_rpcclient_profile_keeps_action_not_credentials_or_target():
+    command = ["rpcclient", "-U", "", "-N", "TPM-DC", "-c", "enumdomusers"]
+    assert _build_filename(command) == "rpcclient_enumdomusers"
+
+
+def test_dig_profile_keeps_record_type_not_server_or_target():
+    command = ["dig", "SRV", "_ldap._tcp.example.com", "@TPM-DC"]
+    assert _build_filename(command) == "dig_srv"
+
+
+@pytest.mark.parametrize("value", [".", "..", "..."])
+def test_dot_only_arguments_never_crash_filename_generation(value):
+    assert _build_filename(["printf", value]).startswith("printf")
+
+
+def test_python_interpreter_flags_are_unwrapped():
+    assert _build_filename(["python3", "-u", "scanner.py", "--shares"]) == "scanner_shares"
+    assert _effective_tool(["python3", "-I", "-m", "http.server", "8000"]) == "http.server"
+
+
+def test_common_script_suffix_is_not_part_of_filename():
+    assert _build_filename(["secretsdump.py", "CORP/admin@dc01"]) == "secretsdump"
+
+
+def test_sudo_long_chdir_is_unwrapped():
+    assert _effective_tool(["sudo", "--chdir", "/tmp", "nmap", "-Pn", "target.htb"]) == "nmap"
+
+
+@pytest.mark.parametrize(
+    "credential_args",
+    [
+        ["--username", "administrator"],
+        ["--password", "SuperSecret123!"],
+        ["--hash", "aad3b435b51404eeaad3b435b51404ee:deadbeef"],
+        ["--password=SuperSecret123!"],
+        ["--hash=deadbeef"],
+    ],
+)
+def test_long_credentials_never_enter_filenames(credential_args):
+    result = _build_filename(["nxc", "smb", "dc01.corp.local", *credential_args, "--shares"])
+    lowered = result.lower()
+    assert "administrator" not in lowered
+    assert "supersecret" not in lowered
+    assert "deadbeef" not in lowered
+    assert "password" not in lowered
+    assert "hash" not in lowered
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        ["ssh", "user:SuperSecret@dc01"],
+        ["secretsdump.py", "CORP/admin:SuperSecret@dc01"],
+        ["mysql", "-uadmin", "-pSuperSecret", "dc01"],
+        ["curl", "--authorization=BearerSuperSecret", "https://portal.example.local"],
+        ["secretsdump.py", "-hashes", "aad3b435:SuperSecret", "CORP/admin@dc01"],
+        ["tool", "-U", "SuperSecret", "dc01"],
+        ["tool", "TOKEN=SuperSecret"],
+        ["python3", "-c", 'print("SuperSecret")'],
+    ],
+)
+def test_positional_attached_and_code_credentials_never_enter_filenames(command):
+    assert "supersecret" not in _build_filename(command).lower()
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        ["sudo", "PASSWORD=SuperSecret123", "nmap", "-sCV", "10.10.10.5"],
+        ["sudo", "-E", "API_TOKEN=abcDEF987", "nmap", "-sCV", "10.10.10.5"],
+        ["bash", "-c", "PASSWORD=SuperSecret123 nmap -sCV 10.10.10.5"],
+        ["bash", "-lc", "API_TOKEN=abcDEF987 exec nmap -sCV 10.10.10.5"],
+        ["curl", "--oauth2-bearer", "SuperSecret123", "https://portal.example.local"],
+        ["aws", "sts", "get-caller-identity", "--session-token", "SuperSecret123"],
+        ["kerbrute", "passwordspray", "corp.local", "users.txt", "SuperSecret123!"],
+    ],
+)
+def test_wrapper_flag_and_positional_credentials_never_enter_filenames(command):
+    lowered = _build_filename(command).lower()
+    assert "supersecret" not in lowered
+    assert "abcdef987" not in lowered
+
+
+def test_password_spray_profile_keeps_only_the_action():
+    command = ["kerbrute", "passwordspray", "corp.local", "users.txt", "SuperSecret123!"]
+    assert _build_filename(command) == "kerbrute_passwordspray"
+
+
+def test_nmap_pn_is_not_treated_as_an_attached_password():
+    assert _build_filename(["nmap", "-Pn", "target.htb"]) == "nmap_Pn_target"
+
+
+def test_malformed_rpcclient_action_never_breaks_naming():
+    assert _build_filename(["rpcclient", "-c", "'", "dc01"]) == "rpcclient"
+
+
+def test_faketime_file_mode_keeps_the_effective_tool():
+    assert _build_filename(["faketime", "-f", "stamp.txt", "nmap", "-Pn", "target.htb"]) == "nmap_Pn_target"
+
+
+@pytest.mark.parametrize("service", ["smb", "https-post-form"])
+def test_hydra_profile_keeps_only_service(service):
+    result = _build_filename(
+        ["hydra", "-L", "resources/users.txt", "-P", "resources/passwords.txt", "dc01", service]
+    )
+    assert result == f"hydra_{service}"

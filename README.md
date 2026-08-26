@@ -4,258 +4,188 @@
   <img src="assets/nocap.jpg" alt="NOCAP banner" width="100%">
 </p>
 
-<p align="center">
-  <strong>Capture tool output without breaking your flow.</strong><br>
-  Automatic filenames, engagement-aware routing, live terminal output, and zero dependencies.
-</p>
-
-<p align="center">
-  <img src="https://img.shields.io/badge/Python-3.9%2B-3776AB?logo=python&logoColor=white" alt="Python 3.9+">
-  <img src="https://img.shields.io/badge/dependencies-zero-2ea44f" alt="Zero dependencies">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT License"></a>
-  <a href="https://bltsec.com/posts/nocap/"><img src="https://img.shields.io/badge/read-the%20blog-111827" alt="Read the blog post"></a>
-  <a href="https://youtu.be/tUDXFoZIkg4"><img src="https://img.shields.io/badge/watch-the%20demo-FF0000?logo=youtube&logoColor=white" alt="Watch the demo"></a>
-</p>
-
-<p align="center">
-  <a href="#install">Install</a> ·
-  <a href="#quick-start">Quick start</a> ·
-  <a href="#usage">Usage</a> ·
-  <a href="#smart-routing">Routing</a> ·
-  <a href="#development">Development</a>
-</p>
-
----
-
-NOCAP wraps any command, mirrors its output to your terminal, and saves the same
-session to a cleanly named file. It preserves PTY behavior, routes captures into
-the right engagement directory, avoids filename collisions, and makes previous
-output easy to find.
+Capture a command once. Keep the raw output, its provenance, and the order in
+which it ran.
 
 ```bash
-cap nmap -sCV 10.10.10.5
-# live output remains visible
-# saved to ./nmap_sCV.txt
+cap -a nmap -sCV 10.10.10.5
+# /workspace/acme/targets/10.10.10.5/recon/nmap_sCV.txt
 ```
 
-## Why NOCAP
+NOCAP mirrors the command through a PTY and writes the same byte stream to a
+private `.txt` file. The capture path uses only Python's standard library.
+`fzf`, TACMUX, and a pager or editor are optional integrations. NOCAP has no
+model or provider integration.
 
-- **No tee chains** — replace repeated `2>&1 | tee ...` one-liners.
-- **TTY preserved** — colors, progress bars, prompts, and interactive tools still work.
-- **Useful filenames** — strips IPs, paths, wordlists, and numeric noise automatically.
-- **Smart routing** — understands targets, tmux engagements, and common security tools.
-- **Safe captures** — private `0600` files and race-safe collision handling.
-- **Fast retrieval** — inspect, search, render, follow, or remove the latest capture.
-- **Portable** — standard-library-only Python 3.9+.
+[Read the NOCAP workflow article](https://bltsec.com/blog/nocap/) ·
+[Watch the original NOCAP 1.x demo](https://youtu.be/tUDXFoZIkg4)
 
 ## Install
+
+NOCAP requires Python 3.11 or newer.
 
 ```bash
 pipx install git+https://github.com/BLTSEC/NOCAP.git
 ```
 
-From a local clone:
+From a clone:
 
 ```bash
-git clone https://github.com/BLTSEC/NOCAP.git
-cd NOCAP
 pipx install .
 ```
 
-Update later with:
+## Daily use
 
 ```bash
-cap update
+cap -a nmap -sCV 10.10.10.5       # route by the effective tool
+cap -n after-creds nxc smb dc -u user -p pass --shares
+cap -s notes printf '%s\n' 'manual checkpoint'
+cap -D -a sudo -n nmap -Pn dc01    # print the destination only
+cap -- ls -la                       # capture a command named like a subcommand
 ```
 
-## Quick start
+Naming is deterministic. NOCAP unwraps common launchers such as `sudo`, `env`,
+`timeout`, `proxychains`, `faketime`, shell `-c`, `uv run`, and Python modules.
+High-frequency tools such as NXC, `rpcclient`, and `dig` get action-oriented
+names. Fix an edge case directly with `cap rename`.
+
+## Find, review, and remove
 
 ```bash
-# Capture to the current directory
-cap nmap -sCV 10.10.10.5
-
-# Add a label
-cap -n after-creds nmap -sCV 10.10.10.5
-
-# Choose a subdirectory
-cap -s recon gobuster dir -u http://10.10.10.5 -w /wordlist.txt
-
-# Route by tool category
-cap --auto hashcat -m 1000 hashes.txt /wordlist.txt
-
-# Preview the destination without creating files or directories
-cap --dry-run feroxbuster -u http://10.10.10.5
-
-# Capture a program whose name overlaps a NOCAP subcommand
-cap -- ls -la
+cap ls
+cap browse                         # fzf preview, then page the selection
+cap browse --print                 # select and print an absolute path
+cap search --kind ports
+cap inspect --verify
+cap timeline
+cap timeline --format md
+cap review --last 10 -o review.md
+cap rename initial-enum
+cap rm                         # remove the last raw capture
+cap rm --pick                  # fzf multi-select, then exact confirmation
 ```
 
-## Usage
+`cap review` creates a local Markdown packet and never transmits it. It includes at most 10 captures
+by default and bounds each rendered capture to 200 lines or 32 KiB. Use
+`--metadata-only`, `--since 2h`, `--tag`, `--pick`, or explicit limits to narrow
+it.
+
+The packet can contain credentials, targets, and findings. Sanitize it with a
+tool such as DECON before it crosses an approved processing boundary.
+
+## Evidence model
+
+Raw `.txt` files are authoritative. NOCAP does **not** use a database. Each
+capture has a private JSON record at:
 
 ```text
-cap [options] [subdir] <command> [args...]
-cap [options] -- <command matching a subcommand> [args...]
-cap grab [options] [command...]
-cap last | cat | tail | open | rm
-cap summary [keyword]
-cap render [file]
-cap ls [subdir]
-cap update
+<target>/.nocap/records/<uuid>.json
 ```
 
-### Options
-
-| Option | Description |
-|---|---|
-| `-n`, `--note LABEL` | Append a short label to the filename |
-| `-s`, `--subdir NAME` | Write beneath a custom relative subdirectory |
-| `-a`, `--auto` | Route by the wrapped tool's category |
-| `-D`, `--dry-run` | Print the destination without changing the filesystem |
-| `--` | Stop NOCAP parsing and capture a command such as `ls` or `cat` |
-
-Run `cap --help` for the complete built-in reference.
-
-## Capture management
-
-| Command | Action |
-|---|---|
-| `cap last` | Print the most recent capture path |
-| `cap cat` | Print the latest capture as clean rendered text |
-| `cap tail` | Follow the latest capture from the beginning |
-| `cap open` | Open it in `$EDITOR`, or render it through `less` |
-| `cap rm` | Delete the latest capture |
-| `cap render [file]` | Remove ANSI, cursor, and progress-bar noise |
-| `cap ls [subdir]` | Browse with `fzf`, or print a compact file table |
-
-The last-capture pointer is stored beneath `$XDG_CACHE_HOME/nocap` or
-`~/.cache/nocap`.
-
-### Search and summarize
+The record stores the shell-rendered executed argv, timestamps, exit status, duration,
+SHA-256, tags, rename history, route, and deletion state.
 
 ```bash
-cap summary                 # time, line count, size, and path
-cap summary passwords       # named credential pattern
-cap summary ports           # open TCP/UDP ports
-cap summary 'CVE-2026-'     # regex or literal search
+cap meta status
+cap meta sync                   # import existing header-valid captures
+cap meta verify                 # compare retained files with recorded hashes
+cap meta export metadata.jsonl
+cap meta prune                  # preview tombstone records
+cap meta prune --yes            # remove tombstone records
 ```
 
-Named searches include `passwords`, `hashes`, `users`, `emails`, `ports`,
-`vulns`, and `urls`. Discovery only includes files with NOCAP's canonical
-`Command:` / `Date:` / `---` header, so unrelated `.txt` files are ignored.
+`cap rm` deletes the raw file and keeps its record as a tombstone. Timelines
+hide tombstones by default; `cap timeline --include-deleted` shows them.
+Interrupted delete metadata and failed rename rollbacks can be reconciled with
+`cap meta sync`; deleted raw output cannot be restored. See
+[Metadata lifecycle](docs/METADATA.md) for recovery and backup details.
+Running captures cannot be renamed or deleted. Review and metadata exports also
+refuse to overwrite capture files or anything below `.nocap`.
 
-## Smart routing
+## Routing
 
-NOCAP resolves the engagement directory in this order:
+The active target is selected in this order:
 
-| Priority | Context | Destination root |
-|---:|---|---|
-| 1 | `$LOADOUT_TARGET` | `$NOCAP_WORKSPACE/$LOADOUT_TARGET` |
-| 2 | `$TARGET` | `$NOCAP_WORKSPACE/$TARGET` |
-| 3 | tmux session named `op_*` | `$NOCAP_WORKSPACE/<target>` |
-| 4 | No engagement context | Current directory |
+1. `TACMUX_TARGET` in the process environment
+2. `TACMUX_TARGET` stored in the current tmux session
+3. `LOADOUT_TARGET` for NOCAP 1.x compatibility
+4. `TARGET`
+5. the target encoded by a legacy `op_*` tmux session
+6. current directory when no target is set
 
-`NOCAP_WORKSPACE` defaults to `/workspace`. If that root does not exist,
-NOCAP safely falls back to the current directory.
+An explicit workspace or target fails closed if it is missing or escapes the
+workspace. Create the target first; operator-loadout and Exegol's `set_target`
+helpers do this automatically. NOCAP never silently redirects an explicitly
+targeted capture to the current directory.
 
-```bash
-export NOCAP_WORKSPACE=/workspace
-export TARGET=10.10.10.5
-
-cap -s recon nmap -sCV "$TARGET"
-# /workspace/10.10.10.5/recon/nmap_sCV.txt
-```
-
-Custom subdirectories may be nested, but must remain relative. Absolute paths
-and `..` traversal are rejected.
-
-### Automatic tool categories
-
-Enable per-command routing with `--auto`, or globally with `NOCAP_AUTO=1`.
-
-| Directory | Representative tools |
-|---|---|
-| `recon/` | nmap, rustscan, ffuf, feroxbuster, nuclei, netexec, bloodhound-python |
-| `screenshots/` | eyewitness, gowitness, aquatone |
-| `loot/` | hashcat, john, volatility, pypykatz, donpapi |
-| `exploitation/` | msfconsole, sqlmap, certipy, evil-winrm, Impacket tools |
-
-An explicit subdirectory always wins over automatic routing. See
-[`src/nocap/tools.py`](src/nocap/tools.py) for the complete mapping.
-
-## Automatic filenames
-
-NOCAP keeps meaningful flags and target hints while removing noisy or sensitive
-path components.
-
-| Command | Capture |
-|---|---|
-| `cap nmap -sCV 10.10.10.5` | `nmap_sCV.txt` |
-| `cap nmap -sCV target.htb` | `nmap_sCV_target.txt` |
-| `cap gobuster dir -u https://portal.example.local -w /wl.txt` | `gobuster_dir_portal.txt` |
-| `cap -n authenticated nmap -sCV target.htb` | `nmap_sCV_target_authenticated.txt` |
-
-Collisions are resolved atomically:
+Configuration loads from the user, then the workspace:
 
 ```text
-nmap_sCV.txt  →  nmap_sCV_2.txt  →  nmap_sCV_3.txt
+$XDG_CONFIG_HOME/nocap/config.toml
+<workspace>/.nocap/config.toml
 ```
 
-Every capture starts with reproducible context:
+Environment variables override both files. Start with
+[`docs/config.example.toml`](docs/config.example.toml).
 
-```text
-Command: nmap -sCV 10.10.10.5
-Date:    Wed Jul 15 14:30:52 CDT 2026
----
-```
+## Commands
 
-## Grab missed output
-
-Forgot to prefix a command with `cap`? Inside tmux, recover it from scrollback:
-
-```bash
-cap grab                              # detect the previous command from history
-cap grab nmap -sCV 10.10.10.5        # specify the command explicitly
-cap grab -n initial -s recon          # label and route the recovered output
-```
-
-`cap grab` writes the same header and file format as a live capture. It requires
-tmux because the pane scrollback is the source of the recovered output.
-
-## Environment
-
-| Variable | Purpose |
+| Command | Purpose |
 |---|---|
-| `NOCAP_AUTO=1` | Enable automatic tool routing by default |
-| `NOCAP_WORKSPACE=PATH` | Change the workspace root from `/workspace` |
-| `LOADOUT_TARGET=NAME` | Prefer a normalized engagement directory name |
-| `TARGET=VALUE` | Select the current engagement when no loadout name exists |
-| `XDG_CACHE_HOME=PATH` | Change the cache root for the last-capture pointer |
-| `EDITOR=COMMAND` | Select the viewer used by `cap open` |
+| `last` | Print the newest retained capture in the current target |
+| `cat`, `render` | Render ANSI and cursor updates; `--compact` is explicitly lossy |
+| `open`, `tail` | Page/edit or follow a capture; editing raw evidence breaks verification |
+| `ls` | Print a deterministic, bounded capture table |
+| `browse` | Select with `fzf`; page it or return its absolute path |
+| `search` | Bounded literal, regex, or named-pattern search |
+| `timeline` | Show retained execution order as a table, Markdown, or JSON |
+| `inspect`, `tag`, `rename` | Manage one capture's metadata and path |
+| `rm` | Delete raw evidence and leave a tombstone |
+| `review` | Export a bounded Markdown review packet |
+| `meta` | Sync, verify, export, inspect, or prune metadata |
+| `grab` | Recover tmux scrollback; the original exit status is recorded as unknown |
+| `logs` | Open TACMUX's session-log browser |
+| `update` | Upgrade the pipx installation |
+
+Run `cap --help` or `cap <command> --help` for flags.
+
+## TACMUX and SITREP
+
+TACMUX owns continuous pane `.log` files. NOCAP owns discrete command `.txt`
+captures. `cap logs` delegates to TACMUX so the formats do not compete.
+
+SITREP's SQLite file is its working snippet index; it is unrelated to NOCAP
+metadata. Source-backed snippets are rebuildable, but pins, manual/imported
+snippets, accepted curation, usage history, and deletion exclusions are DB-only
+state worth backing up. SITREP can execute a selected snippet through `cap -a`,
+after which the capture appears in the same target timeline.
+
+## Migrating from 1.x
+
+- Use Python 3.11 or newer.
+- The completion bell is off by default. Set `bell = true` under `[capture]` if
+  you want it back.
+- Explicit workspaces and targets now fail closed instead of falling back to
+  the current directory.
+- Run `cap meta sync` once per existing target to create records for older
+  header-valid captures. Back up `.nocap` with the raw capture directories.
+- Prefer `TACMUX_TARGET`. `LOADOUT_TARGET` is read only for legacy compatibility.
+- `cap ls` always lists. Use `cap browse` for `fzf` and `cap browse --print` when
+  another shell command needs the selected path. Bounded results say when
+  `--all` is required.
 
 ## Development
 
 ```bash
-git clone https://github.com/BLTSEC/NOCAP.git
-cd NOCAP
-pipx install -e ".[dev]"
-
-PYTHONPATH=src pytest -q
+python3.11 -m venv .venv
+. .venv/bin/activate
+pip install -e '.[dev]'
+pytest -q
 ```
 
-| Module | Responsibility |
-|---|---|
-| `cli.py` | Argument parsing and live-capture orchestration |
-| `filename.py` | Safe filenames and atomic collision handling |
-| `pty.py` | PTY execution, terminal sizing, and I/O forwarding |
-| `rendering.py` | ANSI/VT100 cleanup and capture viewing |
-| `routing.py` | Engagement and output-directory resolution |
-| `subcommands.py` | Capture discovery, tmux recovery, and subcommands |
-| `tools.py` | Tool-to-directory routing data |
+The test suite covers PTY behavior, deterministic naming, routing containment,
+stream rendering, metadata integrity, tombstones, migration, and review bounds.
 
 ## License
 
 [MIT](LICENSE)
-
----
-
-<p align="center"><strong>No-overhead Capture. Automatic Path routing.</strong></p>

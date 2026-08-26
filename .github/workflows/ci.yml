@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      TZ: UTC
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.14"]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: python -m pip install -e '.[dev]'
+      - run: python -m compileall -q src tests
+      - run: python -m pytest -q
+      - run: python -m pip wheel --no-deps . -w /tmp/nocap-wheel
+      - if: matrix.python-version == '3.11'
+        run: |
+          python -m pip install build
+          python -m build --sdist --outdir /tmp/nocap-dist
+          python - <<'PY'
+          import tarfile
+          from pathlib import Path
+
+          archive = next(Path("/tmp/nocap-dist").glob("*.tar.gz"))
+          with tarfile.open(archive) as source:
+              members = source.getnames()
+          blocked = ("/.claude/", "/.pytest_cache/", "/.ruff_cache/", "/.venv/")
+          leaked = [name for name in members if any(marker in f"/{name}/" for marker in blocked)]
+          if leaked:
+              raise SystemExit(f"local files leaked into sdist: {leaked}")
+          PY
+      - run: |
+          python -m venv /tmp/nocap-smoke
+          /tmp/nocap-smoke/bin/pip install /tmp/nocap-wheel/*.whl
+          /tmp/nocap-smoke/bin/cap --version | grep -qx 'nocap 2.0.0'

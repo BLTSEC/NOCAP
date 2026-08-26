@@ -1,0 +1,23 @@
+[capture]
+workspace = "/workspace"
+auto_route = true
+bell = false
+
+[limits]
+list = 50
+search = 100
+review_captures = 10
+review_lines = 200
+review_bytes = 32768
+
+[routing.aliases]
+cme = "nxc"
+
+[routing.tools]
+nmapq = "recon"
+scanhosts = "recon"
+fullportscan = "recon"
+hostscan = "recon"
+dcenum = "recon"
+adcredenum = "recon"
+rcreds = "loot"

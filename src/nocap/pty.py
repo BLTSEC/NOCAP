@@ -15,6 +15,7 @@ import tty
 from contextlib import contextmanager
 from pathlib import Path
 
+
 def _term_size() -> tuple[int, int]:
     try:
         ts = fcntl.ioctl(sys.stdout.fileno(), termios.TIOCGWINSZ, b"\x00" * 8)
@@ -34,6 +35,7 @@ def _set_winsize(fd: int, rows: int, cols: int) -> None:
         pass
 
 
+@contextmanager
 def _raw_terminal(fd: int):
     """Context manager: put *fd* in raw mode, restore on exit."""
     old = termios.tcgetattr(fd)
@@ -130,7 +132,7 @@ def _run_pty(cmd: list[str], outfile: Path) -> int:
     os.close(slave_fd)
 
     # Propagate terminal resize events to the child
-    def _sigwinch(sig: int, frame: object) -> None:  # noqa: ARG001
+    def _sigwinch(sig: int, frame: object) -> None:
         r, c = _term_size()
         _set_winsize(master_fd, r, c)
         try:

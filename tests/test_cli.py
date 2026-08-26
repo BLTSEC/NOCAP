@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -16,7 +17,6 @@ import nocap.subcommands as subcommands
 
 def test_dry_run_does_not_create_output_directory(tmp_path, monkeypatch, capsys):
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("NOCAP_WORKSPACE", str(tmp_path / "missing-workspace"))
 
     with pytest.raises(SystemExit, match="0"):
         cli._main(["-D", "-s", "new/deep", "printf", "ok"])
@@ -25,9 +25,18 @@ def test_dry_run_does_not_create_output_directory(tmp_path, monkeypatch, capsys)
     assert "new/deep/printf_ok.txt" in capsys.readouterr().out
 
 
+def test_dot_subdir_writes_to_active_root(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+
+    with pytest.raises(SystemExit, match="0"):
+        cli._main(["-D", "-s", ".", "printf", "ok"])
+
+    assert capsys.readouterr().out.strip() == str(tmp_path / "printf_ok.txt")
+
+
 def test_double_dash_escapes_subcommand_name(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("NOCAP_WORKSPACE", str(tmp_path / "missing-workspace"))
+    monkeypatch.setattr(subcommands, "_LAST_FILE", tmp_path / "last")
     invoked: list[list[str]] = []
 
     def fake_run(cmd: list[str], outfile: Path) -> int:
@@ -44,21 +53,74 @@ def test_double_dash_escapes_subcommand_name(tmp_path, monkeypatch):
     assert (tmp_path / "ls_la.txt").is_file()
 
 
-def test_subcommand_rejects_ignored_arguments(capsys):
+def test_rm_rejects_more_than_one_selector(capsys):
     with pytest.raises(SystemExit) as exc:
-        subcommands._cmd_rm(["unexpected"])
+        subcommands._cmd_rm(["one", "two"])
 
     assert exc.value.code == 2
-    assert "cap -- rm" in capsys.readouterr().err
+    assert "unrecognized arguments" in capsys.readouterr().err
+
+
+def test_global_parse_error_stays_concise(capsys):
+    with pytest.raises(SystemExit, match="2"):
+        cli._main(["--bogus"])
+
+    error = capsys.readouterr().err
+    assert "unrecognized arguments: --bogus" in error
+    assert "NOCAP — keep" not in error
+
+
+def test_grab_help_does_not_require_tmux(monkeypatch, capsys):
+    monkeypatch.delenv("TMUX", raising=False)
+
+    with pytest.raises(SystemExit, match="0"):
+        subcommands._cmd_grab(["--help"])
+
+    assert "usage: cap grab" in capsys.readouterr().out
 
 
 @pytest.mark.parametrize("subdir", ["../outside", "/tmp/outside"])
 def test_output_dir_rejects_paths_outside_capture_base(subdir, tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("NOCAP_WORKSPACE", str(tmp_path / "missing-workspace"))
 
     with pytest.raises(ValueError, match="relative path"):
         routing._get_output_dir(subdir)
+
+
+def test_explicit_missing_workspace_fails_closed(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("NOCAP_WORKSPACE", str(tmp_path / "missing"))
+
+    with pytest.raises(ValueError, match="configured workspace does not exist"):
+        routing._get_output_dir()
+
+
+def test_explicit_missing_target_fails_closed_even_for_dry_run(tmp_path, monkeypatch):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    monkeypatch.setenv("NOCAP_WORKSPACE", str(workspace))
+    monkeypatch.setenv("TACMUX_TARGET", "typo/target")
+
+    with pytest.raises(SystemExit, match="2"):
+        cli._main(["-D", "id"])
+
+    assert not (workspace / "typo").exists()
+
+
+def test_header_write_failure_discards_claim_and_pending_metadata(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        cli,
+        "_write_capture_header",
+        lambda *args, **kwargs: (_ for _ in ()).throw(OSError("disk full")),
+    )
+
+    with pytest.raises(SystemExit, match="2"):
+        cli._main(["-q", "id"])
+
+    assert list(tmp_path.glob("*.txt")) == []
+    records = tmp_path / ".nocap" / "records"
+    assert not records.exists() or list(records.glob("*.json")) == []
 
 
 def test_redirected_stdin_reaches_child_process(tmp_path):
@@ -138,3 +200,18 @@ def test_remember_last_uses_absolute_path(tmp_path, monkeypatch):
 )
 def test_format_size(size, expected):
     assert subcommands._format_size(size) == expected
+
+
+def test_status_json_reports_effective_target_and_source(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("TARGET", "10.10.10.5")
+    workspace = tmp_path / "workspace"
+    (workspace / "10.10.10.5").mkdir(parents=True)
+    monkeypatch.setenv("NOCAP_WORKSPACE", str(workspace))
+
+    subcommands._cmd_status(["--json"])
+
+    result = json.loads(capsys.readouterr().out)
+    assert result["target"] == "10.10.10.5"
+    assert result["target_source"] == "TARGET"
+    assert "tacmux_target" in result
