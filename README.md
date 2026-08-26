@@ -142,7 +142,6 @@ bounded list, search, and review limits.
 | Tool | Role |
 |---|---|
 | [TACMUX](https://github.com/BLTSEC/TACMUX) | Supplies target context and continuous pane logs. `cap logs` opens its browser. |
-| SITREP | Can execute a selected snippet through `cap -a` and add the result to the target timeline. |
 | `fzf` | Enables `browse`, `rm --pick`, and `review --pick`. |
 
 <details>
