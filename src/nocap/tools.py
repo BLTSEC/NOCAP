@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
-SUBDIRS = frozenset({"recon", "loot", "exploitation", "screenshots", "notes"})
+from collections.abc import Sequence
+
+SUBDIRS = frozenset(
+    {"recon", "exploitation", "loot", "screenshots", "reports", "notes"}
+)
 
 # Flags whose *next* token is a value to be consumed (not added to filename)
 SKIP_FLAGS = frozenset({
@@ -66,7 +70,6 @@ TOOL_SUBDIRS: dict[str, str] = {
     "jsluice": "recon",
     "linkfinder": "recon",
     "robotstester": "recon",
-    "patator": "recon",
     "ssh-audit": "recon",
     "gospider": "recon",
     "cariddi": "recon",
@@ -134,8 +137,6 @@ TOOL_SUBDIRS: dict[str, str] = {
     "nxc": "recon",
     "crackmapexec": "recon",
     "cme": "recon",
-    "sprayhound": "recon",
-    "smartbrute": "recon",
     "ldapdomaindump": "recon",
     "bloodhound-python": "recon",
     "rusthound": "recon",
@@ -173,15 +174,11 @@ TOOL_SUBDIRS: dict[str, str] = {
     # ── loot: password cracking ───────────────────────────────────────────────
     "hashcat": "loot",
     "john": "loot",
-    "hydra": "loot",
-    "medusa": "loot",
-    "legba": "loot",
     "fcrackzip": "loot",
     "pdfcrack": "loot",
     "nth": "loot",             # name-that-hash
     "haiti": "loot",
     "pkcrack": "loot",
-    "ncrack": "loot",
     "aircrack-ng": "loot",
     "hcxpcapngtool": "loot",
     # loot: forensics & steganography
@@ -205,6 +202,9 @@ TOOL_SUBDIRS: dict[str, str] = {
     "keytabextract": "loot",
     "PCredz": "loot",
     "firefox_decrypt": "loot",
+    "secretsdump.py": "loot",
+    "GetNPUsers.py": "loot",
+    "GetUserSPNs.py": "loot",
     # ── exploitation: frameworks & C2 ────────────────────────────────────────
     "msfconsole": "exploitation",
     "msfvenom": "exploitation",
@@ -217,6 +217,14 @@ TOOL_SUBDIRS: dict[str, str] = {
     "Villain.py": "exploitation",
     "pwncat-vl": "exploitation",
     "pwncat-cs": "exploitation",
+    # exploitation: online credential attacks
+    "hydra": "exploitation",
+    "legba": "exploitation",
+    "medusa": "exploitation",
+    "ncrack": "exploitation",
+    "patator": "exploitation",
+    "smartbrute": "exploitation",
+    "sprayhound": "exploitation",
     # exploitation: tunneling & pivoting
     "ligolo-ng": "exploitation",
     "chisel": "exploitation",
@@ -271,6 +279,7 @@ TOOL_SUBDIRS: dict[str, str] = {
     "pre2k": "exploitation",
     "passthecert.py": "exploitation",
     "certipy": "exploitation",
+    "certipy-ad": "exploitation",
     "noPac.py": "exploitation",
     "privexchange.py": "exploitation",
     "ms14-068.py": "exploitation",
@@ -285,7 +294,133 @@ TOOL_SUBDIRS: dict[str, str] = {
     "smbexec.py": "exploitation",
     "atexec.py": "exploitation",
     "dcomexec.py": "exploitation",
-    "secretsdump.py": "exploitation",
-    "GetNPUsers.py": "exploitation",
-    "GetUserSPNs.py": "exploitation",
 }
+
+
+_NXC_TOOLS = frozenset({"cme", "crackmapexec", "netexec", "nxc"})
+_NXC_LOOT_FLAGS = frozenset(
+    {"--dpapi", "--get-file", "--lsa", "--ntds", "--sam"}
+)
+_NXC_EXEC_FLAGS = frozenset({"-x", "-X", "--exec-method", "--put-file"})
+_NXC_LOOT_MODULES = frozenset(
+    {
+        "donpapi",
+        "firefox",
+        "handlekatz",
+        "lsassy",
+        "masky",
+        "mobaxterm",
+        "mremoteng",
+        "nanodump",
+        "procdump",
+        "putty",
+        "rdcman",
+        "spider_plus",
+        "teams_localdb",
+        "veeam",
+        "wifi",
+        "winscp",
+    }
+)
+_NXC_RECON_MODULES = frozenset(
+    {
+        "adcs",
+        "daclread",
+        "find-computer",
+        "laps",
+        "ldap-checker",
+        "maq",
+        "pso",
+        "spooler",
+        "subnets",
+        "user-desc",
+        "wcc",
+        "webdav",
+    }
+)
+_CERTIPY_RECON_ACTIONS = frozenset({"find", "parse"})
+_CERTIPY_LOOT_ACTIONS = frozenset({"cert"})
+_CERTIPY_EXPLOIT_ACTIONS = frozenset(
+    {
+        "account",
+        "auth",
+        "ca",
+        "forge",
+        "relay",
+        "req",
+        "shadow",
+        "template",
+    }
+)
+_KERBRUTE_RECON_ACTIONS = frozenset({"userenum"})
+_KERBRUTE_EXPLOIT_ACTIONS = frozenset(
+    {"bruteforce", "bruteuser", "passwordspray"}
+)
+
+
+def _nxc_modules(args: Sequence[str]) -> list[str]:
+    modules: list[str] = []
+    for index, value in enumerate(args):
+        lowered = value.lower()
+        if lowered.startswith("--module="):
+            modules.append(value.partition("=")[2].lower())
+        elif value == "-M" or lowered == "--module":
+            if index + 1 < len(args):
+                modules.append(args[index + 1].lower())
+    return modules
+
+
+def _nxc_route(args: Sequence[str]) -> str:
+    """Route NetExec-family actions by the artifact an operator keeps."""
+    lowered = {value.lower() for value in args}
+    modules = _nxc_modules(args)
+
+    if lowered & _NXC_LOOT_FLAGS or any(
+        module in _NXC_LOOT_MODULES for module in modules
+    ):
+        return "loot"
+    if any(value in _NXC_EXEC_FLAGS for value in args):
+        return "exploitation"
+    if modules:
+        if all(
+            module.startswith("enum_") or module in _NXC_RECON_MODULES
+            for module in modules
+        ):
+            return "recon"
+        return "exploitation"
+    return "recon"
+
+
+def _first_action(args: Sequence[str], actions: frozenset[str]) -> str:
+    return next((value.lower() for value in args if value.lower() in actions), "")
+
+
+def route_for_tool(tool: str, args: Sequence[str]) -> str:
+    """Return the built-in route for a normalized tool invocation."""
+    if tool in _NXC_TOOLS:
+        return _nxc_route(args)
+
+    if tool in {"certipy", "certipy-ad"}:
+        action = _first_action(
+            args,
+            _CERTIPY_RECON_ACTIONS
+            | _CERTIPY_LOOT_ACTIONS
+            | _CERTIPY_EXPLOIT_ACTIONS,
+        )
+        if action in _CERTIPY_RECON_ACTIONS:
+            return "recon"
+        if action in _CERTIPY_LOOT_ACTIONS:
+            return "loot"
+        if action in _CERTIPY_EXPLOIT_ACTIONS:
+            return "exploitation"
+
+    if tool == "kerbrute":
+        action = _first_action(
+            args, _KERBRUTE_RECON_ACTIONS | _KERBRUTE_EXPLOIT_ACTIONS
+        )
+        if action in _KERBRUTE_RECON_ACTIONS:
+            return "recon"
+        if action in _KERBRUTE_EXPLOIT_ACTIONS:
+            return "exploitation"
+
+    return TOOL_SUBDIRS.get(tool, "")

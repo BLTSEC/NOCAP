@@ -20,7 +20,6 @@ from nocap.config import Settings, load_settings
 from nocap.filename import (
     _build_filename,
     _claim_outfile,
-    _effective_tool,
     _normalize_command,
 )
 from nocap.metadata import (
@@ -55,7 +54,7 @@ from nocap.routing import (
     _get_output_dir,
     _target_value,
 )
-from nocap.tools import TOOL_SUBDIRS
+from nocap.tools import route_for_tool
 
 _SUMMARY_PATTERNS: dict[str, re.Pattern[str]] = {
     "passwords": re.compile(
@@ -330,8 +329,10 @@ def _require_no_args(name: str, args: list[str] | None) -> None:
 
 def _route_for(cmd: list[str], settings: Settings) -> tuple[list[str], str, str]:
     normalized = _normalize_command(cmd, settings.aliases)
-    tool = _effective_tool(cmd, settings.aliases)
-    route = settings.routes.get(tool, TOOL_SUBDIRS.get(tool, ""))
+    tool = Path(normalized[0]).name if normalized else ""
+    route = settings.routes.get(tool)
+    if route is None:
+        route = route_for_tool(tool, normalized[1:])
     return normalized, tool, route
 
 

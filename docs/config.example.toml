@@ -14,10 +14,13 @@ review_bytes = 32768
 cme = "nxc"
 
 [routing.tools]
+# Add local wrappers here. Built-in tools do not need entries.
 nmapq = "recon"
 scanhosts = "recon"
 fullportscan = "recon"
 hostscan = "recon"
 dcenum = "recon"
 adcredenum = "recon"
+credspray = "exploitation"
 rcreds = "loot"
+cleanlog = "reports"

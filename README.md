@@ -17,18 +17,19 @@
 
 ## Install
 
-NOCAP supports Linux and macOS and requires Python 3.11 or newer.
+NOCAP supports Linux and macOS and requires Python 3.11 or newer, `uv`, and
+pipx 1.12 or newer.
 
 ```bash
-pipx install https://github.com/BLTSEC/NOCAP/archive/refs/tags/v2.0.0.zip
-cap --version                            # nocap 2.0.0
+pipx install --backend uv https://github.com/BLTSEC/NOCAP/archive/refs/tags/v2.1.0.zip
+cap --version                            # nocap 2.1.0
 ```
 
 From a clone, run `pipx install .`. A pinned installation stays on its selected
 tag when `cap update` runs. Move releases explicitly:
 
 ```bash
-pipx install --force https://github.com/BLTSEC/NOCAP/archive/refs/tags/vX.Y.Z.zip
+pipx install --force --backend uv https://github.com/BLTSEC/NOCAP/archive/refs/tags/vX.Y.Z.zip
 ```
 
 ## Start in 60 seconds
@@ -44,7 +45,7 @@ cap ls
 cap timeline
 ```
 
-`-a` routes by the effective tool:
+`-a` routes by the effective tool and, where needed, its action:
 
 ```text
 ~/engagements/acme/
@@ -91,7 +92,7 @@ limits each rendered excerpt to 200 lines or 32 KiB. Inspect it before sharing.
 |---|---|
 | Capture | Mirrors the live PTY to a `.txt` file created with mode `0600`. |
 | Naming | Unwraps launchers such as `sudo`, `env`, `proxychains`, shell `-c`, `uv run`, and Python modules; collisions get numeric suffixes. |
-| Routing | `-a` routes by effective tool. Target precedence is environment `TACMUX_TARGET`, tmux `TACMUX_TARGET`, legacy `LOADOUT_TARGET`, `TARGET`, legacy `op_*`, then the current directory. |
+| Routing | `-a` routes by effective tool and selected actions for NetExec, Certipy, and Kerbrute. Target precedence is environment `TACMUX_TARGET`, tmux `TACMUX_TARGET`, legacy `LOADOUT_TARGET`, `TARGET`, legacy `op_*`, then the current directory. |
 | Safety | Explicit workspaces and targets must exist and remain inside the workspace. Invalid targets never fall back to the current directory. |
 | Metadata | Stores one private JSON record per capture under `.nocap/records`; there is no database or daemon. |
 | Integrity | Records SHA-256 and file size. Verify with `cap inspect --verify` or `cap meta verify`. |
@@ -136,6 +137,11 @@ bell = false
 automatic routing, and bell settings. See
 [`docs/config.example.toml`](docs/config.example.toml) for routes, aliases, and
 bounded list, search, and review limits.
+
+Explicit `-s` and positional phase directories win over configured tool routes;
+configured routes win over built-in action routing. The standard TACMUX phases
+are `recon`, `exploitation`, `loot`, `screenshots`, and `reports`. TACMUX owns
+continuous session `logs`; `notes` remains available for existing workflows.
 
 ## Integrations
 

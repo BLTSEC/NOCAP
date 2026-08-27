@@ -14,13 +14,13 @@ from nocap.filename import (
     _build_filename,
     _claim_outfile,
     _compute_outfile,
-    _effective_tool,
+    _normalize_command,
 )
 from nocap.metadata import abandon_record, create_record, finalize_record
 from nocap.pty import _run_pty
 from nocap.routing import _active_root, _get_output_dir
 from nocap.subcommands import _DISPATCH, _remember_last, _write_capture_header
-from nocap.tools import SUBDIRS, TOOL_SUBDIRS
+from nocap.tools import SUBDIRS, route_for_tool
 
 __all__ = ["main"]
 
@@ -112,8 +112,12 @@ def _settings() -> Settings:
 
 
 def _route_for(cmd: list[str], settings: Settings) -> tuple[str, str]:
-    effective = _effective_tool(cmd, settings.aliases)
-    return effective, settings.routes.get(effective, TOOL_SUBDIRS.get(effective, ""))
+    normalized = _normalize_command(cmd, settings.aliases)
+    effective = Path(normalized[0]).name if normalized else ""
+    route = settings.routes.get(effective)
+    return effective, route if route is not None else route_for_tool(
+        effective, normalized[1:]
+    )
 
 
 def _status(message: str, *, quiet: bool) -> None:

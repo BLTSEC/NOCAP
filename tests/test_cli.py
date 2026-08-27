@@ -34,6 +34,17 @@ def test_dot_subdir_writes_to_active_root(tmp_path, monkeypatch, capsys):
     assert capsys.readouterr().out.strip() == str(tmp_path / "printf_ok.txt")
 
 
+def test_reports_positional_shorthand(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+
+    with pytest.raises(SystemExit, match="0"):
+        cli._main(["-D", "reports", "printf", "ok"])
+
+    assert capsys.readouterr().out.strip() == str(
+        tmp_path / "reports" / "printf_ok.txt"
+    )
+
+
 def test_double_dash_escapes_subcommand_name(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(subcommands, "_LAST_FILE", tmp_path / "last")

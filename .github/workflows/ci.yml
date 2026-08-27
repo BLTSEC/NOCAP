@@ -43,4 +43,4 @@ jobs:
       - run: |
           python -m venv /tmp/nocap-smoke
           /tmp/nocap-smoke/bin/pip install /tmp/nocap-wheel/*.whl
-          /tmp/nocap-smoke/bin/cap --version | grep -qx 'nocap 2.0.0'
+          /tmp/nocap-smoke/bin/cap --version | grep -qx 'nocap 2.1.0'
