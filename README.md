@@ -62,7 +62,8 @@ deletion state.
 ```bash
 # Capture
 cap -a nmap -sCV "$TARGET"
-cap -a -n after-creds nxc smb dc -u user -p pass --shares
+export KRB5CCNAME="$HOME/tickets/operator.ccache"
+cap -a -n after-creds nxc smb "$TARGET" --use-kcache --shares
 cap -s notes printf '%s\n' 'manual checkpoint'
 cap -D -a sudo -n nmap -Pn dc01       # print the destination only
 cap -- ls -la                          # capture a command named "ls"
