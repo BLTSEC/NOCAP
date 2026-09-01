@@ -1107,15 +1107,6 @@ def _cmd_status(args: list[str] | None = None) -> None:
         print(f"metadata issues {issues}")
 
 
-def _cmd_logs(args: list[str] | None = None) -> None:
-    _require_no_args("logs", args)
-    if not shutil.which("tacmux"):
-        _fail("tacmux not found; session logs remain a TACMUX responsibility")
-    root = _root()
-    log_dir = root / "logs"
-    command = ["tacmux", "logs"] + ([str(log_dir)] if log_dir.is_dir() else [])
-    raise SystemExit(subprocess.run(command).returncode)
-
 
 def _cmd_update(args: list[str] | None = None) -> None:
     _require_no_args("update", args)
@@ -1268,5 +1259,4 @@ _DISPATCH: dict[str, Callable[[list[str]], None]] = {
     "review": _cmd_review,
     "meta": _cmd_meta,
     "status": _cmd_status,
-    "logs": _cmd_logs,
 }

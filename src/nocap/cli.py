@@ -87,14 +87,13 @@ Manage:
   meta status|sync|verify|export|prune
   status                 Show routing and metadata health
   grab [command...]      Capture the last tmux command's scrollback
-  logs                   Delegate session logs to TACMUX
   update                 Upgrade the pipx installation
 
 CAPTURE may be an ID prefix or a path below the active target. Deleted
 captures are hidden unless a command explicitly offers --include-deleted.
 
 Config: $XDG_CONFIG_HOME/nocap/config.toml and <workspace>/.nocap/config.toml
-Target: TACMUX_TARGET, tmux TACMUX_TARGET, LOADOUT_TARGET (legacy), then TARGET
+Target: TACMUX_TARGET, tmux TACMUX_TARGET, then TARGET
 """
 
 

@@ -44,26 +44,6 @@ def _tmux_target() -> str:
     return value.partition("=")[2].strip() if value.startswith("TACMUX_TARGET=") else ""
 
 
-def _legacy_tmux_target() -> str:
-    """Recover the target encoded by a pre-TACMUX ``op_*`` session name."""
-    if not os.environ.get("TMUX"):
-        return ""
-    try:
-        result = subprocess.run(
-            ["tmux", "display-message", "-p", "#S"],
-            capture_output=True,
-            text=True,
-            timeout=2,
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        return ""
-    if result.returncode != 0:
-        return ""
-    session = result.stdout.strip()
-    if not session.startswith("op_"):
-        return ""
-    return session.removeprefix("op_").replace("_", ".")
-
 
 def _target_value() -> tuple[str, str]:
     value = os.environ.get("TACMUX_TARGET", "").strip()
@@ -72,13 +52,9 @@ def _target_value() -> tuple[str, str]:
     value = _tmux_target()
     if value:
         return value, "tmux TACMUX_TARGET"
-    for key in ("LOADOUT_TARGET", "TARGET"):
-        value = os.environ.get(key, "").strip()
-        if value:
-            return value, key
-    value = _legacy_tmux_target()
+    value = os.environ.get("TARGET", "").strip()
     if value:
-        return value, "tmux op_* session"
+        return value, "TARGET"
     return "", ""
 
 
