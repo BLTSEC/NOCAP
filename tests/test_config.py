@@ -95,25 +95,24 @@ def test_dot_subdir_means_active_root(tmp_path, monkeypatch):
 
 def test_target_precedence_and_source(monkeypatch):
     monkeypatch.setenv("TACMUX_TARGET", "current")
-    monkeypatch.setenv("LOADOUT_TARGET", "legacy")
+    monkeypatch.setenv("LOADOUT_TARGET", "ignored")
     monkeypatch.setenv("TARGET", "raw")
     assert _target_value() == ("current", "TACMUX_TARGET")
 
     monkeypatch.delenv("TACMUX_TARGET")
-    assert _target_value() == ("legacy", "LOADOUT_TARGET")
+    assert _target_value() == ("raw", "TARGET")
 
 
-def test_legacy_op_session_is_final_target_fallback(monkeypatch):
+def test_legacy_target_inputs_are_ignored(monkeypatch):
     monkeypatch.setenv("TMUX", "1")
+    monkeypatch.setenv("LOADOUT_TARGET", "legacy")
     calls = []
 
     def fake_run(command, **kwargs):
         calls.append(command)
-        if "show-environment" in command:
-            return type("Result", (), {"returncode": 1, "stdout": ""})()
-        return type("Result", (), {"returncode": 0, "stdout": "op_10_20_30_40\n"})()
+        return type("Result", (), {"returncode": 1, "stdout": ""})()
 
     monkeypatch.setattr("nocap.routing.subprocess.run", fake_run)
 
-    assert _target_value() == ("10.20.30.40", "tmux op_* session")
-    assert len(calls) == 2
+    assert _target_value() == ("", "")
+    assert calls == [["tmux", "show-environment", "TACMUX_TARGET"]]

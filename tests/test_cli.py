@@ -90,6 +90,13 @@ def test_grab_help_does_not_require_tmux(monkeypatch, capsys):
     assert "usage: cap grab" in capsys.readouterr().out
 
 
+def test_removed_logs_integration_is_not_advertised():
+    assert "logs" not in subcommands._DISPATCH
+    assert "cap logs" not in cli.USAGE
+    assert "LOADOUT_TARGET" not in cli.USAGE
+    assert "op_*" not in cli.USAGE
+
+
 @pytest.mark.parametrize("subdir", ["../outside", "/tmp/outside"])
 def test_output_dir_rejects_paths_outside_capture_base(subdir, tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)

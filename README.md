@@ -21,8 +21,8 @@ NOCAP supports Linux and macOS and requires Python 3.11 or newer, `uv`, and
 pipx 1.12 or newer.
 
 ```bash
-pipx install --backend uv https://github.com/BLTSEC/NOCAP/archive/refs/tags/v2.1.0.zip
-cap --version                            # nocap 2.1.0
+pipx install --backend uv https://github.com/BLTSEC/NOCAP/archive/refs/tags/v2.2.0.zip
+cap --version                            # nocap 2.2.0
 ```
 
 From a clone, run `pipx install .`. A pinned installation stays on its selected
@@ -93,7 +93,7 @@ limits each rendered excerpt to 200 lines or 32 KiB. Inspect it before sharing.
 |---|---|
 | Capture | Mirrors the live PTY to a `.txt` file created with mode `0600`. |
 | Naming | Unwraps launchers such as `sudo`, `env`, `proxychains`, shell `-c`, `uv run`, and Python modules; collisions get numeric suffixes. |
-| Routing | `-a` routes by effective tool and selected actions for NetExec, Certipy, and Kerbrute. Target precedence is environment `TACMUX_TARGET`, tmux `TACMUX_TARGET`, legacy `LOADOUT_TARGET`, `TARGET`, legacy `op_*`, then the current directory. |
+| Routing | `-a` routes by effective tool and selected actions for NetExec, Certipy, and Kerbrute. Target precedence is environment `TACMUX_TARGET`, tmux `TACMUX_TARGET`, `TARGET`, then the current directory. |
 | Safety | Explicit workspaces and targets must exist and remain inside the workspace. Invalid targets never fall back to the current directory. |
 | Metadata | Stores one private JSON record per capture under `.nocap/records`; there is no database or daemon. |
 | Integrity | Records SHA-256 and file size. Verify with `cap inspect --verify` or `cap meta verify`. |
@@ -113,7 +113,7 @@ record set. Back up captures and `.nocap` together. The
 | Manage | `inspect`, `tag`, `rename`, `rm` |
 | History | `timeline`, `review` |
 | Health | `status`, `meta status|sync|verify|export|prune` |
-| Integrations | `logs`, `update` |
+| Maintenance | `update` |
 
 Capture selectors accept an ID prefix or a path below the active target. Where
 a selector is optional, omitting it uses the newest retained capture in that
@@ -148,16 +148,18 @@ continuous session `logs`; `notes` remains available for existing workflows.
 
 | Tool | Role |
 |---|---|
-| [TACMUX](https://github.com/BLTSEC/TACMUX) | Supplies target context and continuous pane logs. `cap logs` opens its browser. |
+| [TACMUX](https://github.com/BLTSEC/TACMUX) | Supplies target context. Use TACMUX **Documents** for continuous pane logs and routed evidence; use `cap browse` for NOCAP captures. |
 | `fzf` | Enables `browse`, `rm --pick`, and `review --pick`. |
 
 <details>
 <summary>Upgrading from NOCAP 1.x</summary>
 
 Use Python 3.11 or newer, then run `cap meta sync` once in each existing target.
-Back up raw captures and `.nocap` together. Prefer `TACMUX_TARGET`;
-`LOADOUT_TARGET` remains a compatibility input. Explicit targets now fail
-closed, and `cap ls` lists instead of opening `fzf`; use `cap browse` to select.
+Back up raw captures and `.nocap` together. NOCAP 2.2 removes the legacy
+`LOADOUT_TARGET`, `op_*` session-name routing, and `cap logs` integration.
+Export `TACMUX_TARGET` (and `NOCAP_WORKSPACE` when using an explicit workspace),
+or use `TARGET` for a standalone target. Use `cap browse` for selected captures
+and TACMUX **Documents** for continuous pane logs.
 </details>
 
 <details>
