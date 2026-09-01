@@ -151,15 +151,31 @@ continuous session `logs`; `notes` remains available for existing workflows.
 | [TACMUX](https://github.com/BLTSEC/TACMUX) | Supplies target context. Use TACMUX **Documents** for continuous pane logs and routed evidence; use `cap browse` for NOCAP captures. |
 | `fzf` | Enables `browse`, `rm --pick`, and `review --pick`. |
 
+## Upgrading
+
+### To 2.2 (breaking)
+
+NOCAP 2.2 removes obsolete TACMUX v1 compatibility. If you are coming from 2.0
+or 2.1, these three removals affect you:
+
+| Removed | Use instead |
+|---|---|
+| `cap logs` | `cap browse` for selected captures; TACMUX **Documents** for continuous pane logs |
+| `LOADOUT_TARGET` | `TACMUX_TARGET` |
+| Target recovery from `op_*` tmux session names | Explicit TACMUX context, or `TARGET` for standalone routing |
+
+Target precedence is now environment `TACMUX_TARGET`, tmux `TACMUX_TARGET`,
+`TARGET`, then the current directory. Session names are never consulted. Set
+`NOCAP_WORKSPACE` when using an explicit workspace; an explicit workspace with
+no resolvable target fails closed rather than writing to the current directory.
+
+Captures and `.nocap` metadata are unaffected. No migration step is required.
+
 <details>
-<summary>Upgrading from NOCAP 1.x</summary>
+<summary>From 1.x</summary>
 
 Use Python 3.11 or newer, then run `cap meta sync` once in each existing target.
-Back up raw captures and `.nocap` together. NOCAP 2.2 removes the legacy
-`LOADOUT_TARGET`, `op_*` session-name routing, and `cap logs` integration.
-Export `TACMUX_TARGET` (and `NOCAP_WORKSPACE` when using an explicit workspace),
-or use `TARGET` for a standalone target. Use `cap browse` for selected captures
-and TACMUX **Documents** for continuous pane logs.
+Back up raw captures and `.nocap` together. The 2.2 removals above apply as well.
 </details>
 
 <details>
