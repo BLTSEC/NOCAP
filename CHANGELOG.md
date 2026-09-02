@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 2.3.0 — 2026-09-02
+
+### Added
+
+- `NOCAP_ROUTE_PREFIX` places automatically routed captures below one validated,
+  relative prefix while retaining a single metadata root. TACMUX uses it to
+  group files by target without fragmenting the engagement timeline.
+- Capture metadata records the complete prefixed route for live and `grab`
+  captures.
+
 ## 2.2.0 — 2026-09-01
 
 Removes obsolete TACMUX v1 compatibility and makes the current evidence

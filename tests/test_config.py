@@ -5,7 +5,13 @@ from __future__ import annotations
 import pytest
 
 from nocap.config import load_settings
-from nocap.routing import _get_base_dir, _get_output_dir, _target_value
+from nocap.routing import (
+    _active_root,
+    _get_base_dir,
+    _get_output_dir,
+    _route_label,
+    _target_value,
+)
 
 
 def test_user_then_workspace_config_then_environment(tmp_path):
@@ -77,6 +83,29 @@ def test_tacmux_target_routes_capture(tmp_path, monkeypatch):
     monkeypatch.setenv("TACMUX_TARGET", "acme/internal")
 
     assert _get_output_dir("recon") == workspace / "acme" / "internal" / "recon"
+
+
+def test_tacmux_route_prefix_keeps_one_active_root(tmp_path, monkeypatch):
+    workspace = tmp_path / "workspace"
+    (workspace / "captures").mkdir(parents=True)
+    monkeypatch.setenv("NOCAP_WORKSPACE", str(workspace))
+    monkeypatch.setenv("TACMUX_TARGET", "captures")
+    monkeypatch.setenv("NOCAP_ROUTE_PREFIX", "WEB01")
+
+    assert _active_root() == workspace / "captures"
+    assert _get_output_dir("recon") == workspace / "captures/WEB01/recon"
+    assert _route_label("recon") == "WEB01/recon"
+
+
+def test_tacmux_route_prefix_rejects_escape(tmp_path, monkeypatch):
+    workspace = tmp_path / "workspace"
+    (workspace / "captures").mkdir(parents=True)
+    monkeypatch.setenv("NOCAP_WORKSPACE", str(workspace))
+    monkeypatch.setenv("TACMUX_TARGET", "captures")
+    monkeypatch.setenv("NOCAP_ROUTE_PREFIX", "../escape")
+
+    with pytest.raises(ValueError, match="NOCAP_ROUTE_PREFIX"):
+        _get_output_dir("recon")
 
 
 def test_invalid_toml_reports_its_path(tmp_path):

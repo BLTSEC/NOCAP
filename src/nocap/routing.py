@@ -85,10 +85,25 @@ def _get_base_dir(settings: Settings | None = None) -> Path | None:
 def _get_output_dir(subdir: str = "", settings: Settings | None = None) -> Path:
     """Resolve a capture directory without allowing base-directory escapes."""
     base = _get_base_dir(settings) or Path.cwd().resolve()
+    prefix = os.environ.get("NOCAP_ROUTE_PREFIX", "").strip()
+    if prefix:
+        relative_prefix = _safe_relative(prefix, label="NOCAP_ROUTE_PREFIX")
+        base = _contained(base, base / relative_prefix, label="NOCAP_ROUTE_PREFIX")
     if not subdir or Path(subdir).parts in {(), (".",)}:
         return base
     relative = _safe_relative(subdir, label="subdir")
     return _contained(base, base / relative, label="subdir")
+
+
+def _route_label(subdir: str = "") -> str:
+    """Return the metadata route after applying an optional TACMUX prefix."""
+    parts: list[str] = []
+    prefix = os.environ.get("NOCAP_ROUTE_PREFIX", "").strip()
+    if prefix:
+        parts.append(_safe_relative(prefix, label="NOCAP_ROUTE_PREFIX").as_posix())
+    if subdir and Path(subdir).parts not in {(), (".",)}:
+        parts.append(_safe_relative(subdir, label="subdir").as_posix())
+    return "/".join(parts)
 
 
 def _active_root(settings: Settings | None = None) -> Path:

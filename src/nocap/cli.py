@@ -18,7 +18,7 @@ from nocap.filename import (
 )
 from nocap.metadata import abandon_record, create_record, finalize_record
 from nocap.pty import _run_pty
-from nocap.routing import _active_root, _get_output_dir
+from nocap.routing import _active_root, _get_output_dir, _route_label
 from nocap.subcommands import _DISPATCH, _remember_last, _write_capture_header
 from nocap.tools import SUBDIRS, route_for_tool
 
@@ -94,6 +94,7 @@ captures are hidden unless a command explicitly offers --include-deleted.
 
 Config: $XDG_CONFIG_HOME/nocap/config.toml and <workspace>/.nocap/config.toml
 Target: TACMUX_TARGET, tmux TACMUX_TARGET, then TARGET
+Route prefix: optional NOCAP_ROUTE_PREFIX below the active target
 """
 
 
@@ -213,7 +214,7 @@ def _main(argv: list[str] | None = None) -> None:
             command=command,
             original_tool=Path(cmd[0]).name,
             effective_tool=effective_tool,
-            route=subdir,
+            route=_route_label(subdir),
             source="live",
         )
     except (OSError, ValueError) as exc:

@@ -21,8 +21,8 @@ NOCAP supports Linux and macOS and requires Python 3.11 or newer, `uv`, and
 pipx 1.12 or newer.
 
 ```bash
-pipx install --backend uv https://github.com/BLTSEC/NOCAP/archive/refs/tags/v2.2.0.zip
-cap --version                            # nocap 2.2.0
+pipx install --backend uv https://github.com/BLTSEC/NOCAP/archive/refs/tags/v2.3.0.zip
+cap --version                            # nocap 2.3.0
 ```
 
 From a clone, run `pipx install .`. A pinned installation stays on its selected
@@ -135,12 +135,14 @@ bell = false
 ```
 
 `NOCAP_WORKSPACE`, `NOCAP_AUTO`, and `NOCAP_BELL` override the workspace,
-automatic routing, and bell settings. See
+automatic routing, and bell settings. `NOCAP_ROUTE_PREFIX` optionally places
+capture routes below one contained prefix without changing the active metadata
+root; TACMUX uses this for engagement-wide timelines with per-target folders. See
 [`docs/config.example.toml`](docs/config.example.toml) for routes, aliases, and
 bounded list, search, and review limits.
 
 Explicit `-s` and positional phase directories win over configured tool routes;
-configured routes win over built-in action routing. The standard TACMUX phases
+configured routes win over built-in action routing. The standard capture phases
 are `recon`, `exploitation`, `loot`, `screenshots`, and `reports`. TACMUX owns
 continuous session `logs`; `notes` remains available for existing workflows.
 
@@ -148,7 +150,7 @@ continuous session `logs`; `notes` remains available for existing workflows.
 
 | Tool | Role |
 |---|---|
-| [TACMUX](https://github.com/BLTSEC/TACMUX) | Supplies target context. Use TACMUX **Documents** for continuous pane logs and routed evidence; use `cap browse` for NOCAP captures. |
+| [TACMUX](https://github.com/BLTSEC/TACMUX) | Supplies target context, an optional contained route prefix, and central pane logs; use `cap browse` for NOCAP captures. |
 | `fzf` | Enables `browse`, `rm --pick`, and `review --pick`. |
 
 ## Upgrading
@@ -160,7 +162,7 @@ or 2.1, these three removals affect you:
 
 | Removed | Use instead |
 |---|---|
-| `cap logs` | `cap browse` for selected captures; TACMUX **Documents** for continuous pane logs |
+| `cap logs` | `cap browse` for selected captures; TACMUX's engagement `logs/` directory for continuous pane logs |
 | `LOADOUT_TARGET` | `TACMUX_TARGET` |
 | Target recovery from `op_*` tmux session names | Explicit TACMUX context, or `TARGET` for standalone routing |
 

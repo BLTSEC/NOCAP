@@ -52,6 +52,7 @@ from nocap.routing import (
     _active_root,
     _ensure_contained,
     _get_output_dir,
+    _route_label,
     _target_value,
 )
 from nocap.tools import route_for_tool
@@ -1212,7 +1213,7 @@ def _cmd_grab(args: list[str] | None = None) -> None:
             command=command,
             original_tool=Path(cmd[0]).name,
             effective_tool=tool,
-            route=subdir,
+            route=_route_label(subdir),
             source="grab",
         )
     except (OSError, ValueError) as exc:

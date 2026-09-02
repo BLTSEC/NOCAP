@@ -12,6 +12,7 @@ def isolate_nocap_environment(tmp_path, monkeypatch):
         "NOCAP_WORKSPACE",
         "NOCAP_AUTO",
         "NOCAP_BELL",
+        "NOCAP_ROUTE_PREFIX",
         "TACMUX_TARGET",
         "TARGET",
         "TMUX",
