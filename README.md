@@ -25,7 +25,7 @@ pipx install --backend uv https://github.com/BLTSEC/NOCAP/archive/refs/tags/v2.3
 cap --version                            # nocap 2.3.0
 ```
 
-From a clone, run `pipx install .`. A pinned installation stays on its selected
+From a clone, run `pipx install --backend uv .`. A pinned installation stays on its selected
 tag when `cap update` runs. Move releases explicitly:
 
 ```bash
@@ -37,19 +37,21 @@ pipx install --force --backend uv https://github.com/BLTSEC/NOCAP/archive/refs/t
 With no target configured, NOCAP uses the current directory:
 
 ```bash
-mkdir -p ~/engagements/acme
-cd ~/engagements/acme
+mkdir -p ~/engagements/example
+cd ~/engagements/example
 
-cap -a nmap -sCV 10.10.10.5
+cap -n local-check uname -a
 cap ls
 cap timeline
 ```
 
-`-a` routes by the effective tool and, where needed, its action:
+This captures local system information, not proof of access to another host.
+For authorized target work, `cap -a nmap -sV "$TARGET"` routes by the effective
+tool and, where needed, its action:
 
 ```text
-~/engagements/acme/
-├── recon/nmap_sCV.txt
+~/engagements/example/
+├── recon/nmap_sV.txt
 └── .nocap/records/<uuid>.json
 ```
 
@@ -119,6 +121,11 @@ Capture selectors accept an ID prefix or a path below the active target. Where
 a selector is optional, omitting it uses the newest retained capture in that
 target. Run `cap --help` or `cap <command> --help` for flags.
 
+In TACMUX 3 sessions the active metadata root is the engagement's `captures/`
+directory, not an individual host. `cap timeline`, `browse`, and default
+latest-capture selection therefore span the engagement. Use an explicit capture
+ID after switching hosts or when other panes are capturing concurrently.
+
 ## Configuration
 
 Configuration loads from the user file and then the active workspace file:
@@ -150,12 +157,17 @@ continuous session `logs`; `notes` remains available for existing workflows.
 
 | Tool | Role |
 |---|---|
-| [TACMUX](https://github.com/BLTSEC/TACMUX) | Supplies target context, an optional contained route prefix, and central pane logs; use `cap browse` for NOCAP captures. |
+| [TACMUX](https://github.com/BLTSEC/TACMUX) | Supplies target context and central pane logs. With NOCAP 2.3+, files go below `captures/<route>/` and metadata stays in `captures/.nocap/`. |
 | `fzf` | Enables `browse`, `rm --pick`, and `review --pick`. |
 
 ## Upgrading
 
-### To 2.2 (breaking)
+TACMUX 3 integration requires NOCAP 2.3 or newer. Keep pipx as the installation
+manager with its uv backend; `cap update` uses pipx. Review the destination with
+`cap status` and `cap -D` after an upgrade.
+
+<details>
+<summary>Older installations</summary>
 
 NOCAP 2.2 removes obsolete TACMUX v1 compatibility. If you are coming from 2.0
 or 2.1, these three removals affect you:
@@ -173,10 +185,7 @@ no resolvable target fails closed rather than writing to the current directory.
 
 Captures and `.nocap` metadata are unaffected. No migration step is required.
 
-<details>
-<summary>From 1.x</summary>
-
-Use Python 3.11 or newer, then run `cap meta sync` once in each existing target.
+From 1.x, use Python 3.11 or newer, then run `cap meta sync` once in each existing target.
 Back up raw captures and `.nocap` together. The 2.2 removals above apply as well.
 </details>
 
